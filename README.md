@@ -83,6 +83,27 @@ Store `id.toBytes()` as an **8‑byte big‑endian binary** value:
 | PostgreSQL | `BYTEA(8)`  | ✅               | Use binary comparison     |
 | MySQL      | `BINARY(8)` | ✅               | Default binary collation  |
 
+---
+
+## Comparison with other identifiers
+
+| Property               | **Nano64**                                | **ULID**                    | **UUIDv4**              | **Snowflake ID**             |
+| ---------------------- | ----------------------------------------- | --------------------------- | ----------------------- | ---------------------------- |
+| Bits total             | 64                                        | 128                         | 128                     | 64                           |
+| Encoded timestamp bits | 44                                        | 48                          | 0                       | 41                           |
+| Random / entropy bits  | 20                                        | 80                          | 122                     | 22 (per-node sequence)       |
+| Sortable by time       | ✅ Yes (lexicographic & numeric)           | ✅ Yes                       | ❌ No                    | ✅ Yes                        |
+| Collision risk (1%)    | ~145 IDs/ms                               | ~26M/ms                     | Practically none        | None (central sequence)      |
+| Typical string length  | 16 hex chars                              | 26 Crockford base32         | 36 hex+hyphens          | 18–20 decimal digits         |
+| Encodes creation time  | ✅                                        | ✅                           | ❌                       | ✅                            |
+| Can hide timestamp     | ✅ via AES-GCM encryption                  | ⚠️ Not built-in             | ✅ (no time field)       | ❌ Not by design              |
+| Database sort order    | ✅ Stable with big-endian BLOB             | ✅ (lexical)                 | ❌ Random                | ✅ Numeric                    |
+| Cryptographic strength | 20-bit random, optional AES               | 80-bit random               | 122-bit random          | None (deterministic)         |
+| Dependencies           | None (crypto optional)                    | None                        | None                    | Central service or worker ID |
+| Target use             | Compact, sortable, optionally private IDs | Human-readable sortable IDs | Pure random identifiers | Distributed service IDs      |
+
+---
+
 ## API Summary
 
 ### `Nano64.generate(timestamp?, rng?)`
