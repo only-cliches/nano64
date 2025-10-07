@@ -58,7 +58,7 @@ console.log(Nano64.compare(a, b)); // -1
 
 ### AES‑GCM encryption
 
-To hide the 
+Keys can easily be encrypted and decrypted to mask their timestamp value from public view.
 
 ```ts
 const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);

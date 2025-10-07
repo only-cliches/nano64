@@ -1,6 +1,6 @@
 {
   "name": "nano64",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "64-bit Time-Sortable Identifiers for TypeScript",
   "type": "module",
   "main": "dist/index.js",
