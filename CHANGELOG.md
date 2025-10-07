@@ -1,5 +1,8 @@
 # Change Log
 
+## 1.1.2 Oct 7, 2025
+Added dash in hex enconding.
+
 ## 1.1.1 Oct 7, 2025
 Improved code docs.
 

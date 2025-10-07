@@ -151,8 +151,13 @@ export class Nano64 {
     /** Unsigned 64-bit bigint value. */
     get value(): bigint { return this._u; }
 
-    /** Uppercase 16-char hex encoding of the u64. */
-    toHex(): string { return this._u.toString(16).padStart(16, "0").toUpperCase(); }
+    /** Uppercase 16-char hex encoding of the u64, with a dash between timestamp and random parts. */
+    toHex(): string {
+        const full = this._u.toString(16).padStart(16, "0").toUpperCase();
+        // Split 44-bit (11 hex digits) timestamp + 20-bit (5 hex digits) random = 16 hex total
+        const split = 11; // ceil(44 / 4)
+        return full.slice(0, split) + "-" + full.slice(split);
+    }
 
     /** 8-byte big-endian encoding of the u64. */
     toBytes(): Uint8Array { return BigIntHelpers.toBytesBE(this._u); }
@@ -245,13 +250,13 @@ export class Nano64 {
     static fromBigInt(v: bigint): Nano64 { return new Nano64(v & MASK64); }
 
     /**
-     * Parse from a 16-char hex string (uppercase or lowercase, optional `0x`).
+     * Parse from 17-char dashed hex (timestamp-random) or plain 16-char hex. (uppercase or lowercase, optional `0x`).
      * @throws if length is not 16.
      */
     static fromHex(hex: string): Nano64 {
-        const h = hex.startsWith("0x") ? hex.slice(2) : hex;
-        if (h.length !== 16) throw new Error("hex must be 16 chars");
-        const v = BigInt("0x" + h) & MASK64;
+        const clean = hex.replace("-", "").replace(/^0x/, "");
+        if (clean.length !== 16) throw new Error("hex must be 16 chars after removing dash");
+        const v = BigInt("0x" + clean) & MASK64;
         return new Nano64(v);
     }
 

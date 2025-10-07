@@ -32,7 +32,7 @@ describe("Nano64 core", () => {
 	it("hex/bytes round-trip", () => {
 		const id = Nano64.generate(1234567890);
 		const hex = id.toHex();
-		expect(hex).toHaveLength(16);
+		expect(hex).toHaveLength(17);
 		const b = id.toBytes();
 		const fromHex = Nano64.fromHex(hex);
 		const fromBytes = Nano64.fromBytes(b);

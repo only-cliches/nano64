@@ -40,12 +40,12 @@ npm install nano64
 import { Nano64 } from "nano64";
 
 const id = Nano64.generate();
-console.log(id.toHex());        // 16‑char uppercase hex 
-// 199BFC763682E78
+console.log(id.toHex());        // 17‑char uppercase hex TIMESTAMP-RANDOM
+// 199C01B6659-5861C
 console.log(id.toBytes());      // Uint8Array(8) 
-// [25, 155, 252, 118, 54, 130, 231, 135]
+// [25,156,1,182,101,149,134,28]
 console.log(id.getTimestamp()); // ms since epoch
-// 1759859139432
+// 1759864645209
 ```
 
 ### Monotonic generation
@@ -69,9 +69,9 @@ const encryptedIdFactory = Nano64.encryptedId(key);
 // Generate and encrypt
 const wrapped = await encryptedIdFactory.generateEncrypted();
 console.log(wrapped.id.toHex()) // wrapped.id contains the unencrypted Nano64.
-// 199BFE19E966F586
+// 199C01B66F8-CB911
 console.log(wrapped.toEncryptedHex()); // 72‑char hex payload
-// 2D5AB93E7484F9D6AE521CBB3766B28C84F88E7424C817B0BE4D6296B07C8C710F867627
+// 2D5CEBF218C569DDE077C4C1F247C708063BAA93B4285CD67D53327EA4C374A64395CFF0
 
 // Decrypt later
 const restored = await encryptedIdFactory.fromEncryptedHex(wrapped.toEncryptedHex());
