@@ -44,7 +44,10 @@ function awaitCrypto(): Crypto {
 }
 
 /** Hex helpers with validation. */
-export const Hex = {
+export const Hex: {
+    readonly fromBytes: (bytes: Uint8Array<ArrayBufferLike>) => string;
+    readonly toBytes: (hex: string) => Uint8Array;
+} = {
     fromBytes(bytes: Uint8Array): string {
         return [...bytes].map(b => b.toString(16).padStart(2, "0")).join("").toUpperCase();
     },
@@ -59,7 +62,10 @@ export const Hex = {
 } as const;
 
 /** Big-endian ⇄ bigint conversions (fixed 8 bytes), **unsigned**. */
-export const BigIntHelpers = {
+export const BigIntHelpers: {
+    readonly fromBytesBE: (bytes: Uint8Array<ArrayBufferLike>) => bigint;
+    readonly toBytesBE: (value: bigint) => Uint8Array;
+} = {
     fromBytesBE(bytes: Uint8Array): bigint {
         if (bytes.length !== 8) throw new Error("must be 8 bytes");
         let v = 0n;
@@ -172,7 +178,12 @@ export class Nano64 {
     /**
      * AES‑GCM binding. Payload: 12‑byte IV || 8‑byte ciphertext || 16‑byte tag = 36 bytes.
      */
-    static encryptedId(aesGcmKey: CryptoKey, clock: Clock = () => Date.now()) {
+    static encryptedId(aesGcmKey: CryptoKey, clock: Clock = () => Date.now()): {
+        readonly encrypt: (id: Nano64) => Promise<EncryptedNano64>;
+        readonly generateEncrypted: (ts?: number, rng?: RNG) => Promise<EncryptedNano64>;
+        readonly fromEncryptedBytes: (bytes: Uint8Array) => Promise<EncryptedNano64>;
+        readonly fromEncryptedHex: (encHex: string) => Promise<EncryptedNano64>;
+    } {
         const IV_LEN = 12;                        // 96-bit nonce
         const PAYLOAD_LEN = IV_LEN + 8 + 16;      // 36 bytes total
 

@@ -2,6 +2,13 @@
 
 **Nano64** is a lightweight library (2kb gzipped) for generating compact 64‑bit identifiers that encode a 44‑bit millisecond timestamp and 20‑bit random field. Each ID fits in 8 bytes, sorts chronologically, and can be safely encrypted with AES‑GCM.
 
+[![GitHub Repo stars](https://img.shields.io/github/stars/only-cliches/nano64)](https://github.com/only-cliches/nano64)
+[![NPM Version](https://img.shields.io/npm/v/nano64)](https://www.npmjs.com/package/nano64)
+[![JSR Version](https://img.shields.io/jsr/v/%40onlycliches/nano64)](https://jsr.io/@onlycliches/nano64)
+[![npm package minimized gzipped size](https://badgen.net/bundlephobia/minzip/nano64)](https://bundlephobia.com/package/nano64@latest)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 ---
 
 ## Features

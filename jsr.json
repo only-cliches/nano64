@@ -1,0 +1,5 @@
+{
+    "name": "@onlycliches/nano64",
+    "version": "1.0.1",
+    "exports": "./src/index.ts"
+}
