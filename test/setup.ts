@@ -1,3 +1,5 @@
+declare const require: any;
+
 // Ensure WebCrypto is available in Node test runtime.
 if (!(globalThis as any).crypto) {
   try {

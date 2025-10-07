@@ -96,4 +96,15 @@ describe("AES-GCM bindings", () => {
 		tampered[20] ^= 0x01; // flip one bit in ciphertext
 		await expect(enc.fromEncryptedBytes(tampered)).rejects.toThrow();
 	});
+
+	it("encryption does not reveal plaintext timestamp prefix", async () => {
+		const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
+		const enc = Nano64.encryptedId(key);
+		const id = Nano64.generate();
+		const hexId = id.toHex();
+		const wrapped = await enc.encrypt(id);
+		const encHex = wrapped.toEncryptedHex();
+		// first 10 hex chars of id should not appear in payload
+		expect(encHex.includes(hexId.slice(0, 10))).toBe(false);
+	});
 });

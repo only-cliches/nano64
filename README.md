@@ -1,6 +1,6 @@
 ## Nano64 — 64‑bit Time‑Sortable Identifiers for TypeScript
 
-**Nano64** is a lightweight library (2kb gzipped) for generating compact 64‑bit identifiers that encode a 44‑bit millisecond timestamp and 20‑bit random field. Each ID fits in 8 bytes, sorts chronologically, and can be safely encrypted with AES‑GCM.
+**Nano64** is a lightweight library for generating time-sortable, globally unique IDs that offer the same practical guarantees as ULID or UUID in half the storage footprint; reducing index and I/O overhead while preserving cryptographic-grade randomness.  Incluedes optional monotonic sequencing and AES-GCM encryption.
 
 [![GitHub Repo stars](https://img.shields.io/github/stars/only-cliches/nano64)](https://github.com/only-cliches/nano64)
 [![NPM Version](https://img.shields.io/npm/v/nano64)](https://www.npmjs.com/package/nano64)
@@ -16,10 +16,9 @@
 * **Time‑sortable:** IDs order by creation time automatically.
 * **Compact:** 8 bytes / 16 hex characters.
 * **Deterministic format:** `[63‥20]=timestamp`, `[19‥0]=random`.
-* **Collision‑resistant:** ~1% risk only if >145 IDs/ms.
+* **Collision‑resistant:** ~1% colllision risk at 145,000 IDs per second.
 * **Cross‑database‑safe:** Big‑endian bytes preserve order in SQLite, Postgres, MySQL, etc.
-* **AES-GCM encryption:** 36-byte authenticated payloads.
-* **Privacy option:** Encryption masks the embedded creation date while preserving sort order.
+* **AES-GCM encryption:** Optional encryption masks the embedded creation date.
 * **Unsigned canonical form:** Single, portable representation (0..2⁶⁴‑1).
 * **Typed and test‑covered:** 100% TypeScript + Vitest.
 
@@ -41,9 +40,12 @@ npm install nano64
 import { Nano64 } from "nano64";
 
 const id = Nano64.generate();
-console.log(id.toHex());        // 16‑char uppercase hex
-console.log(id.toBytes());      // Uint8Array(8)
+console.log(id.toHex());        // 16‑char uppercase hex 
+// 199BFC763682E78
+console.log(id.toBytes());      // Uint8Array(8) 
+// [25, 155, 252, 118, 54, 130, 231, 135]
 console.log(id.getTimestamp()); // ms since epoch
+// 1759859139432
 ```
 
 ### Monotonic generation
@@ -62,26 +64,34 @@ Keys can easily be encrypted and decrypted to mask their timestamp value from pu
 
 ```ts
 const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
-const enc = Nano64.encryptedId(key);
+const encryptedIdFactory = Nano64.encryptedId(key);
 
 // Generate and encrypt
-const wrapped = await enc.generateEncrypted();
+const wrapped = await encryptedIdFactory.generateEncrypted();
+console.log(wrapped.id.toHex()) // wrapped.id contains the unencrypted Nano64.
+// 199BFE19E966F586
 console.log(wrapped.toEncryptedHex()); // 72‑char hex payload
+// 2D5AB93E7484F9D6AE521CBB3766B28C84F88E7424C817B0BE4D6296B07C8C710F867627
 
 // Decrypt later
-const restored = await enc.fromEncryptedHex(wrapped.toEncryptedHex());
+const restored = await encryptedIdFactory.fromEncryptedHex(wrapped.toEncryptedHex());
 console.log(restored.id.value === wrapped.id.value); // true
 ```
 
-### Database storage
+### Database primary key storage
 
 Store `id.toBytes()` as an **8‑byte big‑endian binary** value:
 
-| DBMS       | Column Type | Preserves Order | Notes                     |
-| ---------- | ----------- | --------------- | ------------------------- |
-| SQLite     | `BLOB(8)`   | ✅               | Lexicographic order works |
-| PostgreSQL | `BYTEA(8)`  | ✅               | Use binary comparison     |
-| MySQL      | `BINARY(8)` | ✅               | Default binary collation  |
+| DBMS        | Column Type       | Preserves Order | Notes                                                                  |
+| ----------- | ----------------- | --------------- | ---------------------------------------------------------------------- |
+| SQLite      | `BLOB` (8 bytes)  | ✅              | Lexicographic byte order matches unsigned big-endian.                  |
+| PostgreSQL  | `BYTEA` (8 bytes) | ✅              | `PRIMARY KEY` on `BYTEA` is fine.                                      |
+| MySQL 8+    | `BINARY(8)`       | ✅              | Binary collation.                                                      |
+| MariaDB     | `BINARY(8)`       | ✅              | Same as MySQL.                                                         |
+| SQL Server  | `BINARY(8)`       | ✅              | Clustered index sorts by bytes.                                        |
+| Oracle      | `RAW(8)`          | ✅              | RAW compares bytewise.                                                 |
+| CockroachDB | `BYTES` (8)       | ✅              | Bytewise ordering.                                                     |
+| DuckDB      | `BLOB` (8)        | ✅              | Bytewise ordering.                                                     |
 
 ---
 

@@ -184,25 +184,17 @@ export class Nano64 {
         readonly fromEncryptedBytes: (bytes: Uint8Array) => Promise<EncryptedNano64>;
         readonly fromEncryptedHex: (encHex: string) => Promise<EncryptedNano64>;
     } {
-        const IV_LEN = 12;                        // 96-bit nonce
-        const PAYLOAD_LEN = IV_LEN + 8 + 16;      // 36 bytes total
-
-        // Per‑process counter to avoid IV reuse with the same key.
-        let ivCounter = 0n;                       // wraps at 2^48
-
-        function nextIV(): Uint8Array {
-            const now48 = BigInt(clock()) & ((1n << 48n) - 1n);
-            ivCounter = (ivCounter + 1n) & ((1n << 48n) - 1n);
-            const ivNum = (now48 << 48n) | ivCounter; // 96 bits
+        const IV_LEN = 12; // 96-bit
+        function randomIV(): Uint8Array {
             const iv = new Uint8Array(IV_LEN);
-            let tmp = ivNum;
-            for (let i = IV_LEN - 1; i >= 0; --i) { iv[i] = Number(tmp & 0xFFn); tmp >>= 8n; }
+            (globalThis.crypto ?? awaitCrypto()).getRandomValues(iv);
             return iv;
         }
+        const PAYLOAD_LEN = IV_LEN + 8 + 16;      // 36 bytes total
 
         return {
             async encrypt(id: Nano64): Promise<EncryptedNano64> {
-                const iv = new Uint8Array(nextIV());
+                const iv = new Uint8Array(randomIV());
                 const plain = new Uint8Array(BigIntHelpers.toBytesBE(id.value));
                 const cipher = new Uint8Array(await (globalThis.crypto ?? awaitCrypto()).subtle.encrypt({ name: "AES-GCM", iv }, aesGcmKey, plain));
                 if (cipher.length !== 8 + 16) throw new Error("unexpected AES-GCM output length");
