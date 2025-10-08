@@ -78,23 +78,6 @@ const restored = await factory.fromEncryptedHex(wrapped.toEncryptedHex());
 console.log(restored.id.value === wrapped.id.value); // true
 ```
 
-### Database primary key storage
-
-Store `id.toBytes()` as an **8‑byte big‑endian binary** value:
-
-| DBMS        | Column Type       | Preserves Order | Notes                                                                  |
-| ----------- | ----------------- | --------------- | ---------------------------------------------------------------------- |
-| SQLite      | `BLOB` (8 bytes)  | ✅              | Lexicographic byte order matches unsigned big-endian.                  |
-| PostgreSQL  | `BYTEA` (8 bytes) | ✅              | `PRIMARY KEY` on `BYTEA` is fine.                                      |
-| MySQL 8+    | `BINARY(8)`       | ✅              | Binary collation.                                                      |
-| MariaDB     | `BINARY(8)`       | ✅              | Same as MySQL.                                                         |
-| SQL Server  | `BINARY(8)`       | ✅              | Clustered index sorts by bytes.                                        |
-| Oracle      | `RAW(8)`          | ✅              | RAW compares bytewise.                                                 |
-| CockroachDB | `BYTES` (8)       | ✅              | Bytewise ordering.                                                     |
-| DuckDB      | `BLOB` (8)        | ✅              | Bytewise ordering.                                                     |
-
----
-
 ## Comparison with other identifiers
 
 | Property               | **Nano64**                                | **ULID**                    | **UUIDv4**              | **Snowflake ID**             |
@@ -157,6 +140,78 @@ Collision characteristics:
 * Concurrent generation (10.6M IDs/sec): ~0.58% collision rate
 
 [Data Source](https://github.com/Codycody31/go-nano64)
+
+---
+## Database Usage
+
+`Nano64` IDs are time-sortable, which allows for highly efficient time-based range queries directly on the ID column. This is much faster than using a separate `timestamp` column, as it leverages the primary key index.
+
+The static method `Nano64.timeRangeToBytes()` is the primary tool for this functionality. It takes a start and end timestamp (in milliseconds) and returns the lowest and highest possible `Nano64` values for that time window as 8-byte arrays. You can then use these byte arrays in a SQL `BETWEEN` clause to perform the query.
+
+### Storing Nano64 IDs in SQL
+
+For this to work, you **must** store IDs using the `id.toBytes()` method and use the approprate data type provided below.
+
+| DBMS        | Column Type       | Preserves Order | Notes                                                                  |
+| ----------- | ----------------- | --------------- | ---------------------------------------------------------------------- |
+| SQLite      | `BLOB` (8 bytes)  | ✅              | Lexicographic byte order matches unsigned big-endian.                  |
+| PostgreSQL  | `BYTEA` (8 bytes) | ✅              | `PRIMARY KEY` on `BYTEA` is fine.                                      |
+| MySQL 8+    | `BINARY(8)`       | ✅              | Binary collation.                                                      |
+| MariaDB     | `BINARY(8)`       | ✅              | Same as MySQL.                                                         |
+| SQL Server  | `BINARY(8)`       | ✅              | Clustered index sorts by bytes.                                        |
+| Oracle      | `RAW(8)`          | ✅              | RAW compares bytewise.                                                 |
+| CockroachDB | `BYTES` (8)       | ✅              | Bytewise ordering.                                                     |
+| DuckDB      | `BLOB` (8)        | ✅              | Bytewise ordering.                                                     |
+
+Using the ID as the **primary key** is highly recommended, as the database's native index will make these range queries extremely fast.
+
+### Example with SQLite
+
+Here’s a complete example using `better-sqlite3` in Node.js.
+
+You can set up a table and run a query like this:
+
+```javascript
+import Database from "better-sqlite3";
+import { Nano64 } from "nano64";
+
+// 1. Setup the database and table
+const db = new Database(":memory:");
+db.exec("CREATE TABLE events (id BLOB PRIMARY KEY, message TEXT)");
+
+// Generate some test IDs
+const id1 = Nano64.generate(Date.now() - 2000); // An ID from 2 seconds ago
+const id2 = Nano64.generate(Date.now() - 1000); // An ID from 1 second ago
+const id3 = Nano64.generate(Date.now());       // An ID from right now
+
+// Insert some records
+const insert = db.prepare("INSERT INTO events (id, message) VALUES (?, ?)");
+insert.run(Buffer.from(id1.toBytes()), "Event from 2s ago");
+insert.run(Buffer.from(id2.toBytes()), "Event from 1s ago");
+insert.run(Buffer.from(id3.toBytes()), "Event from now");
+
+// 2. Define the time range for the query
+// Let's find all events in the last 1.5 seconds.
+const tsEnd = Date.now();
+const tsStart = tsEnd - 1500;
+
+// 3. Generate the query bounds using the library
+const { start, end } = Nano64.timeRangeToBytes(tsStart, tsEnd);
+
+// 4. Execute the query
+const query = db.prepare("SELECT * FROM events WHERE id BETWEEN ? AND ?");
+const results = query.all(Buffer.from(start), Buffer.from(end));
+
+// 5. Process the results
+console.log(`Found ${results.length} events between ${new Date(tsStart).toISOString()} and ${new Date(tsEnd).toISOString()}`);
+// Expected output: Found 2 events...
+
+for (const row of results) {
+    const foundId = Nano64.fromBytes(row.id);
+    console.log(`- ID: ${foundId.toHex()}, Timestamp: ${foundId.toDate().toISOString()}, Message: ${row.message}`);
+}
+// Expected output will show the records for id2 and id3.
+```
 
 ---
 

@@ -1,5 +1,10 @@
 # Change Log
 
+## 1.2.0 Oct 8, 2025
+Implemented new `timeRangeToBytes` function designed to assist with database range queries.
+Added SQLite based tests and standard tests for new range query feature.
+Added SQLite examples to readme for range query feature.
+
 ## 1.1.3 Oct 7, 2025
 Added Go port to README.md
 BREAKING: Updated `encryptedId` to be `encryptedFactory`, copying the API tweak from the go port.
