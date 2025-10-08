@@ -4,6 +4,8 @@
 Implemented new `timeRangeToBytes` function designed to assist with database range queries.
 Added SQLite based tests and standard tests for new range query feature.
 Added SQLite examples to readme for range query feature.
+Added tests
+Updated code comments
 
 ## 1.1.3 Oct 7, 2025
 Added Go port to README.md
