@@ -76,7 +76,7 @@ describe("Nano64 core", () => {
 describe("AES-GCM bindings", () => {
 	it("encrypts and decrypts", async () => {
 		const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
-		const enc = Nano64.encryptedId(key);
+		const enc = Nano64.encryptedFactory(key);
 		const id = Nano64.generate(1234567890, () => 0xABCDE & ((1 << 20) - 1));
 		const wrapped = await enc.encrypt(id);
 		expect(wrapped.toEncryptedBytes().length).toBe(36);
@@ -86,7 +86,7 @@ describe("AES-GCM bindings", () => {
 
 	it("rejects wrong lengths and tampering", async () => {
 		const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
-		const enc = Nano64.encryptedId(key);
+		const enc = Nano64.encryptedFactory(key);
 		const wrapped = await enc.generateEncrypted();
 
 		const bad = wrapped.toEncryptedBytes().slice(0, 35); // too short
@@ -99,7 +99,7 @@ describe("AES-GCM bindings", () => {
 
 	it("encryption does not reveal plaintext timestamp prefix", async () => {
 		const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
-		const enc = Nano64.encryptedId(key);
+		const enc = Nano64.encryptedFactory(key);
 		const id = Nano64.generate();
 		const hexId = id.toHex();
 		const wrapped = await enc.encrypt(id);
@@ -108,3 +108,47 @@ describe("AES-GCM bindings", () => {
 		expect(encHex.includes(hexId.slice(0, 10))).toBe(false);
 	});
 });
+
+/*
+
+
+function examples() {
+
+    // Example usage:
+    const ulid = Nano64.generate();
+    console.log("UInt64:", ulid.toHex());
+    console.log("Base16:", ulid.toBytes().toString());
+    console.log("Timestamp:", ulid.getTimestamp());
+
+    const roundTrip = Nano64.fromHex(ulid.toHex());
+    console.log("Round trip match:", roundTrip.value === ulid.value);
+
+    (async () => {
+        const key = await crypto.subtle.generateKey(
+            { name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]
+        );
+
+        const exported = await window.crypto.subtle.exportKey("raw", key);
+        console.log(new Uint8Array(exported));
+
+        // 2. Get the generator bound to that key.
+        const enc = Nano64.encryptedId(key);
+
+        // 3. Create an encrypted ID.
+        const encryptedID = await enc.generateEncrypted()   // => 72-char hex string
+
+        // 4. Later (or on another client with the same key) decode it.
+        const original = await enc.fromEncryptedHex(encryptedID.toEncryptedHex()); // => NanoULID instance
+        console.log("ENCRYPTED", original.id.toHex(), encryptedID.toEncryptedHex()); // 16-char ULID hex
+        console.log(original.id.getTimestamp(), encryptedID.id.getTimestamp());
+
+        let start = Date.now();
+        for (let i = 0; i < 100; i++) {
+            await enc.generateEncrypted()
+        }
+        console.log(Date.now() - start);
+
+    })()
+}
+
+*/

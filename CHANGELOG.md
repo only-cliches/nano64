@@ -1,5 +1,9 @@
 # Change Log
 
+## 1.1.3 Oct 7, 2025
+Added Go port to README.md
+BREAKING: Updated `encryptedId` to be `encryptedFactory`, copying the API tweak from the go port.
+
 ## 1.1.2 Oct 7, 2025
 Added dash in hex enconding.
 

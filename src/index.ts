@@ -268,7 +268,7 @@ export class Nano64 {
      * Payload: 12-byte random IV || 8-byte ciphertext || 16-byte tag (36 bytes total).
      * IV is random to avoid timestamp leakage and IV reuse hazards.
      */
-    static encryptedId(aesGcmKey: CryptoKey, clock: Clock = () => Date.now()): {
+    static encryptedFactory(aesGcmKey: CryptoKey, clock: Clock = () => Date.now()): {
         /** Encrypt an existing Nano64 into an authenticated payload. */
         readonly encrypt: (id: Nano64) => Promise<EncryptedNano64>;
         /** Generate a new Nano64, then encrypt it. */

@@ -64,17 +64,17 @@ IDs can easily be encrypted and decrypted to mask their timestamp value from pub
 
 ```ts
 const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
-const encryptedIdFactory = Nano64.encryptedId(key);
+const factory = Nano64.encryptedFactory(key);
 
 // Generate and encrypt
-const wrapped = await encryptedIdFactory.generateEncrypted();
-console.log(wrapped.id.toHex()) // wrapped.id contains the unencrypted Nano64.
+const wrapped = await factory.generateEncrypted();
+console.log(wrapped.id.toHex()) // Unencrypted ID
 // 199C01B66F8-CB911
 console.log(wrapped.toEncryptedHex()); // 72‑char hex payload
 // 2D5CEBF218C569DDE077C4C1F247C708063BAA93B4285CD67D53327EA4C374A64395CFF0
 
 // Decrypt later
-const restored = await encryptedIdFactory.fromEncryptedHex(wrapped.toEncryptedHex());
+const restored = await factory.fromEncryptedHex(wrapped.toEncryptedHex());
 console.log(restored.id.value === wrapped.id.value); // true
 ```
 
@@ -136,7 +136,7 @@ Export utilities.
 
 Comparison helpers.
 
-### `Nano64.encryptedId(key, clock?)`
+### `Nano64.encryptedFactory(key, clock?)`
 
 Returns an object with `encrypt`, `generateEncrypted`, `fromEncryptedBytes`, and `fromEncryptedHex`.
 
@@ -149,7 +149,14 @@ Returns an object with `encrypt`, `generateEncrypted`, `fromEncryptedBytes`, and
 | 44   | Timestamp (ms) | Chronological order | 1970–2527             |
 | 20   | Random         | Collision avoidance | 1,048,576 patterns/ms |
 
-Collision probability ≈ 1% if ~145 IDs generated in one millisecond.
+Collision characteristics:
+
+* Theoretical: ~1% collision probability at 145 IDs/millisecond
+* Real-world sustained rate (145k IDs/sec): <0.05% collision rate
+* High-speed burst (3.4M IDs/sec): ~0.18% collision rate
+* Concurrent generation (10.6M IDs/sec): ~0.58% collision rate
+
+[Data Source](https://github.com/Codycody31/go-nano64)
 
 ---
 
@@ -168,6 +175,12 @@ All unit tests are written in Vitest. They cover:
 * Timestamp extraction and monotonic logic
 * AES‑GCM encryption/decryption integrity
 * Overflow edge cases
+
+---
+
+## Unoffical Ports
+
+* [Go](https://github.com/Codycody31/go-nano64)
 
 ---
 
