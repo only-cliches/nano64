@@ -181,7 +181,7 @@ describe("Nano64 with in-memory SQLite", () => {
         db = new Database(":memory:");
 
 		// store the ID and it's associated timestamp
-        db.exec("CREATE TABLE events (id BLOB PRIMARY KEY, timestamp INTEGER NOT NULL)");
+        db.exec("CREATE TABLE events (id BLOB(8) PRIMARY KEY, timestamp INTEGER NOT NULL)");
 
         const insert = db.prepare("INSERT INTO events (id, timestamp) VALUES (?, ?)");
         const insertMany = db.transaction((ids: Nano64[]) => {

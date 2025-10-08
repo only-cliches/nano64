@@ -123,16 +123,16 @@ Using Nano64 as the **primary key** is recommended, since the database’s nativ
 
 Store IDs as unsigned big-endian bytes using `id.toBytes()` and a byte-ordered column type.
 
-| DBMS        | Column Type | Preserves Order | Notes                                                 |
-| ----------- | ----------- | --------------- | ----------------------------------------------------- |
-| SQLite      | `BLOB(8)`   | ✅               | Lexicographic byte order matches unsigned big-endian. |
-| PostgreSQL  | `BYTEA(8)`  | ✅               | Works with primary key indexes.                       |
-| MySQL 8+    | `BINARY(8)` | ✅               | Use binary collation.                                 |
-| MariaDB     | `BINARY(8)` | ✅               | Same as MySQL.                                        |
-| SQL Server  | `BINARY(8)` | ✅               | Clustered index sorts by bytes.                       |
-| Oracle      | `RAW(8)`    | ✅               | Bytewise comparison.                                  |
-| CockroachDB | `BYTES(8)`  | ✅               | Bytewise ordering.                                    |
-| DuckDB      | `BLOB(8)`   | ✅               | Bytewise ordering.                                    |
+| DBMS        | Column Type |  Notes                                                |
+| ----------- | ----------- | ----------------------------------------------------- |
+| SQLite      | `BLOB(8)`   | Lexicographic byte order matches unsigned big-endian. |
+| PostgreSQL  | `BYTEA(8)`  | Works with primary key indexes.                       |
+| MySQL 8+    | `BINARY(8)` | Use binary collation.                                 |
+| MariaDB     | `BINARY(8)` | Same as MySQL.                                        |
+| SQL Server  | `BINARY(8)` | Clustered index sorts by bytes.                       |
+| Oracle      | `RAW(8)`    | Bytewise comparison.                                  |
+| CockroachDB | `BYTES(8)`  | Bytewise ordering.                                    |
+| DuckDB      | `BLOB(8)`   | Bytewise ordering.                                    |
 
 ### SQLite Example
 
