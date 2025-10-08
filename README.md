@@ -108,52 +108,6 @@ console.log(restored.id.value === wrapped.id.value); // true
 
 ---
 
-## API Summary
-
-### `Nano64.generate(timestamp?, rng?)`
-
-Creates a new ID with optional timestamp and RNG.
-
-### `Nano64.generateMonotonic(timestamp?, rng?)`
-
-Same as `generate`, but strictly increasing within the same millisecond.
-
-### `Nano64.fromHex(hex)` / `fromBytes(bytes)` / `fromBigIntUnsigned(v)`
-
-Parse back into a Nano64.
-
-### `id.toHex()` / `id.toBytes()` / `id.toDate()` / `id.getTimestamp()`
-
-Export utilities.
-
-### `Nano64.compare(a,b)` / `id.equals(b)`
-
-Comparison helpers.
-
-### `Nano64.encryptedFactory(key, clock?)`
-
-Returns an object with `encrypt`, `generateEncrypted`, `fromEncryptedBytes`, and `fromEncryptedHex`.
-
----
-
-## Design
-
-| Bits | Field          | Purpose             | Range          |
-| ---- | -------------- | ------------------- | -------------- |
-| 44   | Timestamp (ms) | Chronological order | 1970–2527      |
-| 20   | Random         | Collision avoidance | 1 048 576 / ms |
-
-Collision characteristics:
-
-* Theoretical: ~1% collision probability at 145 IDs/millisecond
-* Real-world sustained rate (145k IDs/sec): <0.05% collision rate
-* High-speed burst (3.4M IDs/sec): ~0.18% collision rate
-* Concurrent generation (10.6M IDs/sec): ~0.58% collision rate
-
-[Reference: go-nano64 data](https://github.com/Codycody31/go-nano64)
-
----
-
 ## Database Usage
 
 Nano64 IDs are time-sortable, enabling **index-only time-range queries** without needing a separate timestamp column.
@@ -217,6 +171,52 @@ for (const row of results) {
   console.log(`- ${found.toHex()} @ ${found.toDate().toISOString()} → ${row.message}`);
 }
 ```
+
+---
+
+## API Summary
+
+### `Nano64.generate(timestamp?, rng?)`
+
+Creates a new ID with optional timestamp and RNG.
+
+### `Nano64.generateMonotonic(timestamp?, rng?)`
+
+Same as `generate`, but strictly increasing within the same millisecond.
+
+### `Nano64.fromHex(hex)` / `fromBytes(bytes)` / `fromBigIntUnsigned(v)`
+
+Parse back into a Nano64.
+
+### `id.toHex()` / `id.toBytes()` / `id.toDate()` / `id.getTimestamp()`
+
+Export utilities.
+
+### `Nano64.compare(a,b)` / `id.equals(b)`
+
+Comparison helpers.
+
+### `Nano64.encryptedFactory(key, clock?)`
+
+Returns an object with `encrypt`, `generateEncrypted`, `fromEncryptedBytes`, and `fromEncryptedHex`.
+
+---
+
+## Design
+
+| Bits | Field          | Purpose             | Range          |
+| ---- | -------------- | ------------------- | -------------- |
+| 44   | Timestamp (ms) | Chronological order | 1970–2527      |
+| 20   | Random         | Collision avoidance | 1 048 576 / ms |
+
+Collision characteristics:
+
+* Theoretical: ~1% collision probability at 145 IDs/millisecond
+* Real-world sustained rate (145k IDs/sec): <0.05% collision rate
+* High-speed burst (3.4M IDs/sec): ~0.18% collision rate
+* Concurrent generation (10.6M IDs/sec): ~0.58% collision rate
+
+[Reference: go-nano64 data](https://github.com/Codycody31/go-nano64)
 
 ---
 
