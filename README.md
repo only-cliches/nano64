@@ -10,7 +10,6 @@ This reduces index and I/O overhead while preserving cryptographic-grade randomn
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
----
 
 ## Features
 
@@ -23,7 +22,6 @@ This reduces index and I/O overhead while preserving cryptographic-grade randomn
 - **Unsigned canonical form:** Portable numeric representation `0‥2⁶⁴ − 1`.  
 - **Typed and tested:** 100 % TypeScript with full Vitest coverage.
 
----
 
 ## Installation
 
@@ -31,7 +29,6 @@ This reduces index and I/O overhead while preserving cryptographic-grade randomn
 npm install nano64
 ````
 
----
 
 ## Usage
 
@@ -50,7 +47,6 @@ console.log(id.getTimestamp()); // ms since epoch
 // 1759864645209
 ```
 
----
 
 ### Monotonic generation
 
@@ -63,7 +59,6 @@ const b = Nano64.generateMonotonic();
 console.log(Nano64.compare(a, b)); // -1
 ```
 
----
 
 ### AES-GCM encryption
 
@@ -85,7 +80,6 @@ const restored = await factory.fromEncryptedHex(wrapped.toEncryptedHex());
 console.log(restored.id.value === wrapped.id.value); // true
 ```
 
----
 
 ## Comparison with Other Identifiers
 
@@ -106,7 +100,6 @@ console.log(restored.id.value === wrapped.id.value); // true
 
 > Nano64 keeps the chronological behavior of ULIDs but in 64 bits instead of 128, cutting key size by half without sacrificing sort order or safety.
 
----
 
 ## Database Usage
 
@@ -172,7 +165,6 @@ for (const row of results) {
 }
 ```
 
----
 
 ## API Summary
 
@@ -200,7 +192,6 @@ Comparison helpers.
 
 Returns an object with `encrypt`, `generateEncrypted`, `fromEncryptedBytes`, and `fromEncryptedHex`.
 
----
 
 ## Design
 
@@ -218,7 +209,6 @@ Collision characteristics:
 
 [Reference: go-nano64 data](https://github.com/Codycody31/go-nano64)
 
----
 
 ## Tests
 
@@ -235,19 +225,16 @@ All tests are written in Vitest and cover:
 * Overflow and edge-case handling
 * BLBO Primary key and range queries with SQLite
 
----
 
 ## Unofficial Ports
 
 * [Go](https://github.com/Codycody31/go-nano64)
 
----
 
 ## License
 
 MIT License
 
----
 
 ## Keywords
 
