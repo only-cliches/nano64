@@ -186,7 +186,7 @@ describe("Nano64 with in-memory SQLite", () => {
         const insert = db.prepare("INSERT INTO events (id, timestamp) VALUES (?, ?)");
         const insertMany = db.transaction((ids: Nano64[]) => {
             for (const id of ids) {
-                insert.run(Buffer.from(id.toBytes()), id.getTimestamp());
+                insert.run(id.toBytes(), id.getTimestamp());
             }
         });
 
@@ -215,7 +215,7 @@ describe("Nano64 with in-memory SQLite", () => {
 
         const results = db
             .prepare("SELECT * FROM events WHERE id BETWEEN ? AND ?")
-            .all(Buffer.from(start), Buffer.from(end)) as { id: ArrayBuffer, timestamp: number }[];
+            .all(start, end) as { id: ArrayBuffer, timestamp: number }[];
 
         // First, check that the correct number of rows was returned.
         expect(results.length).toBe(ROWS_PER_MS);
@@ -233,7 +233,7 @@ describe("Nano64 with in-memory SQLite", () => {
 
         const results = db
             .prepare("SELECT * FROM events WHERE id BETWEEN ? AND ?")
-            .all(Buffer.from(start), Buffer.from(end)) as { id: ArrayBuffer, timestamp: number }[];
+            .all(start, end) as { id: ArrayBuffer, timestamp: number }[];
 
         // Check the total count for the 3ms range.
         expect(results.length).toBe(ROWS_PER_MS * 3);
@@ -251,7 +251,7 @@ describe("Nano64 with in-memory SQLite", () => {
 
         const results = db
             .prepare("SELECT * FROM events WHERE id BETWEEN ? AND ?")
-            .all(Buffer.from(start), Buffer.from(end)) as { id: ArrayBuffer, timestamp: number }[];
+            .all(start, end) as { id: ArrayBuffer, timestamp: number }[];
 
         expect(results.length).toBe(0);
     });
@@ -313,27 +313,39 @@ function examples() {
             { name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]
         );
 
-        const exported = await window.crypto.subtle.exportKey("raw", key);
-        console.log(new Uint8Array(exported));
+        const exported = await crypto.subtle.exportKey("raw", key);
+        
+        const importedKey = await crypto.subtle.importKey("raw", exported, { name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
 
         // 2. Get the generator bound to that key.
-        const enc = Nano64.encryptedId(key);
+        const enc = Nano64.encryptedFactory(key);
+        const enc2 = Nano64.encryptedFactory(importedKey);
 
         // 3. Create an encrypted ID.
         const encryptedID = await enc.generateEncrypted()   // => 72-char hex string
 
         // 4. Later (or on another client with the same key) decode it.
-        const original = await enc.fromEncryptedHex(encryptedID.toEncryptedHex()); // => NanoULID instance
+        const original = await enc2.fromEncryptedHex(encryptedID.toEncryptedHex()); // => NanoULID instance
         console.log("ENCRYPTED", original.id.toHex(), encryptedID.toEncryptedHex()); // 16-char ULID hex
         console.log(original.id.getTimestamp(), encryptedID.id.getTimestamp());
 
+        let results = [];
         let start = Date.now();
-        for (let i = 0; i < 100; i++) {
-            await enc.generateEncrypted()
+        for (let i = 0; i < 100000; i++) {
+            results.push(Nano64.generate());
+        }
+        console.log(Date.now() - start);
+
+
+        start = Date.now();
+        for (let i = 0; i < 100000; i++) {
+            results.push(Nano64.generateMonotonic());
         }
         console.log(Date.now() - start);
 
     })()
 }
+
+examples()
 
 */

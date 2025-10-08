@@ -27,7 +27,7 @@ This reduces index and I/O overhead while preserving cryptographic-grade randomn
 
 ```bash
 npm install nano64
-````
+```
 
 
 ## Usage
@@ -134,7 +134,7 @@ import Database from "better-sqlite3";
 import { Nano64 } from "nano64";
 
 const db = new Database(":memory:");
-db.exec("CREATE TABLE events (id BLOB PRIMARY KEY, message TEXT)");
+db.exec("CREATE TABLE events (id BLOB(8) PRIMARY KEY, message TEXT)");
 
 // generate IDs
 const id1 = Nano64.generate(Date.now() - 2000);
@@ -143,9 +143,9 @@ const id3 = Nano64.generate(Date.now());
 
 // insert records
 const insert = db.prepare("INSERT INTO events (id, message) VALUES (?, ?)");
-insert.run(Buffer.from(id1.toBytes()), "Event from 2s ago");
-insert.run(Buffer.from(id2.toBytes()), "Event from 1s ago");
-insert.run(Buffer.from(id3.toBytes()), "Event from now");
+insert.run(id1.toBytes(), "Event from 2s ago");
+insert.run(id2.toBytes(), "Event from 1s ago");
+insert.run(id3.toBytes(), "Event from now");
 
 // search for rows between now and 1.5 seconds ago
 const tsEnd = Date.now();
@@ -154,7 +154,7 @@ const tsStart = tsEnd - 1500;
 const { start, end } = Nano64.timeRangeToBytes(tsStart, tsEnd);
 
 const query = db.prepare("SELECT * FROM events WHERE id BETWEEN ? AND ?");
-const results = query.all(Buffer.from(start), Buffer.from(end));
+const results = query.all(start, end);
 
 // Will only get 2 rows
 console.log(`Found ${results.length} events between ${new Date(tsStart).toISOString()} and ${new Date(tsEnd).toISOString()}`);
@@ -223,7 +223,7 @@ All tests are written in Vitest and cover:
 * Timestamp extraction and monotonic logic
 * AES-GCM encryption / decryption integrity
 * Overflow and edge-case handling
-* BLBO Primary key and range queries with SQLite
+* BLOB Primary key and range queries with SQLite
 
 
 ## Unofficial Ports
