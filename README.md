@@ -134,7 +134,7 @@ import Database from "better-sqlite3";
 import { Nano64 } from "nano64";
 
 const db = new Database(":memory:");
-db.exec("CREATE TABLE events (id BLOB(8) PRIMARY KEY, message TEXT)");
+db.exec("CREATE TABLE events (id BLOB PRIMARY KEY, message TEXT)");
 
 // generate IDs
 const id1 = Nano64.generate(Date.now() - 2000);
@@ -164,6 +164,8 @@ for (const row of results) {
   console.log(`- ${found.toHex()} @ ${found.toDate().toISOString()} → ${row.message}`);
 }
 ```
+
+You can also store IDs as integers in your database, which can increase performance but comes with some caveats.  [Database integer storage instructions](https://github.com/only-cliches/nano64/blob/main/database.md).
 
 
 ## API Summary

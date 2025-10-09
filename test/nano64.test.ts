@@ -186,14 +186,13 @@ describe("SignedNano64 with in-memory SQLite", () => {
 	beforeAll(() => {
 		db = new Database(":memory:");
 
-		// MODIFICATION: Use INTEGER type for signed 64-bit IDs.
 		// In SQLite, INTEGER can store up to a signed 64-bit value.
 		db.exec("CREATE TABLE events (id INTEGER PRIMARY KEY, timestamp INTEGER NOT NULL)");
 
 		const insert = db.prepare("INSERT INTO events (id, timestamp) VALUES (?, ?)");
 		const insertMany = db.transaction((ids: Nano64[]) => {
 			for (const id of ids) {
-				const signedId = SignedNano64.fromNano64(id);
+				const signedId = SignedNano64.fromId(id);
 				insert.run(signedId, id.getTimestamp());
 			}
 		});
@@ -220,7 +219,7 @@ describe("SignedNano64 with in-memory SQLite", () => {
 
 	it("should retrieve all rows for a single millisecond and verify their timestamps", () => {
 		const targetTs = baseTimestamps[2];
-		const [ start, end ] = SignedNano64.timeRangeToSignedBigInts(targetTs, targetTs);
+		const [ start, end ] = SignedNano64.timeRangeToBigInts(targetTs, targetTs);
 
 		const results = db
 			.prepare("SELECT * FROM events WHERE id BETWEEN ? AND ?")
@@ -235,7 +234,7 @@ describe("SignedNano64 with in-memory SQLite", () => {
 	it("should retrieve all rows across a range of milliseconds and verify their timestamps", () => {
 		const tsStart = baseTimestamps[1];
 		const tsEnd = baseTimestamps[3];
-		const [ start, end ] = SignedNano64.timeRangeToSignedBigInts(tsStart, tsEnd);
+		const [ start, end ] = SignedNano64.timeRangeToBigInts(tsStart, tsEnd);
 
 		const results = db
 			.prepare("SELECT * FROM events WHERE id BETWEEN ? AND ?")
@@ -250,7 +249,7 @@ describe("SignedNano64 with in-memory SQLite", () => {
 
 	it("should retrieve zero rows for an empty range", () => {
 		const emptyTs = 1800000000000; // A timestamp where no data exists
-		const [ start, end ] = SignedNano64.timeRangeToSignedBigInts(emptyTs, emptyTs + 10000);
+		const [ start, end ] = SignedNano64.timeRangeToBigInts(emptyTs, emptyTs + 10000);
 
 		const results = db
 			.prepare("SELECT * FROM events WHERE id BETWEEN ? AND ?")
@@ -265,11 +264,11 @@ describe("Nano64 with in-memory SQLite", () => {
 
 	const ROWS_PER_MS = 1000;
 	const baseTimestamps = [
-		100, // Dec 31, 1969
-		4395000000000, // Apr 9, 2019
-		8790000000000, // July 17, 2248
-		13185000000000, // Oct 25, 2307
-		17580000000000, // Feb 1, 2527
+		100,             // 1970
+		4395000000000,   // 2019
+		8790000000000,   // 2248
+		13185000000000,  // 2307
+		17580000000000,  // 2527 (near max)
 	];
 	const TOTAL_ROWS = ROWS_PER_MS * baseTimestamps.length;
 
@@ -278,7 +277,7 @@ describe("Nano64 with in-memory SQLite", () => {
 		db = new Database(":memory:");
 
 		// store the ID and it's associated timestamp
-		db.exec("CREATE TABLE events (id BLOB(8) PRIMARY KEY, timestamp INTEGER NOT NULL) WITHOUT ROWID");
+		db.exec("CREATE TABLE events (id BLOB PRIMARY KEY, timestamp INTEGER NOT NULL) WITHOUT ROWID");
 
 		const insert = db.prepare("INSERT INTO events (id, timestamp) VALUES (?, ?)");
 		const insertMany = db.transaction((ids: Nano64[]) => {
@@ -409,6 +408,84 @@ describe("AES-GCM bindings", () => {
 		// first 10 hex chars of id should not appear in payload
 		expect(encHex.includes(hexId.slice(0, 10))).toBe(false);
 	});
+});
+
+describe("SignedNano64 class", () => {
+    // A few timestamps to test against, covering different ranges.
+    const testTimestamps = [
+        100, // An early date in 1970
+        1665277745000, // A date in 2022
+        17580000000000, // A date in 2527, near the max limit
+    ];
+
+    it("should round-trip Nano64 <-> signed BigInt correctly", () => {
+        for (const ts of testTimestamps) {
+            const originalId = Nano64.generate(ts);
+
+            // 1. Convert from Nano64 to a signed BigInt
+            const signedId = SignedNano64.fromId(originalId);
+
+            // 2. Convert the signed BigInt back to a Nano64
+            const reconstructedId = SignedNano64.toId(signedId);
+
+            // 3. Verify that the final ID is identical to the original
+            expect(reconstructedId.equals(originalId)).toBe(true);
+            expect(reconstructedId.value).toBe(originalId.value);
+        }
+    });
+
+    it("should extract the correct timestamp directly from a signed BigInt", () => {
+        for (const ts of testTimestamps) {
+            const originalId = Nano64.generate(ts);
+            const signedId = SignedNano64.fromId(originalId);
+
+            // 1. Extract the timestamp directly from the signed value
+            const extractedTimestamp = SignedNano64.getTimestamp(signedId);
+
+            // 2. Verify it matches the original timestamp
+            expect(extractedTimestamp).toBe(ts);
+        }
+    });
+
+    it("should calculate correct signed bounds for a time range", () => {
+        const tsStart = 1672531200000; // 2023-01-01T00:00:00.000Z
+        const tsEnd = 1672617599999;   // 2023-01-01T23:59:59.999Z
+
+        // 1. Get the signed bounds from the function
+        const [ start, end ] = SignedNano64.timeRangeToBigInts(tsStart, tsEnd);
+
+        // 2. Manually calculate the expected unsigned bounds
+        const SIGN_BIT = 1n << 63n;
+        const RAND_MAX = (1n << RANDOM_BITS) - 1n;
+        const expectedUnsignedStart = (BigInt(tsStart) << RANDOM_BITS);
+        const expectedUnsignedEnd = (BigInt(tsEnd) << RANDOM_BITS) | RAND_MAX;
+
+        // 3. Manually convert the unsigned bounds to signed bounds
+        const expectedSignedStart = expectedUnsignedStart - SIGN_BIT;
+        const expectedSignedEnd = expectedUnsignedEnd - SIGN_BIT;
+
+        // 4. Verify the function's output matches the manual calculation
+        expect(start).toBe(expectedSignedStart);
+        expect(end).toBe(expectedSignedEnd);
+    });
+
+    it("should throw an error for invalid time ranges", () => {
+        // Case 1: Start time is after end time
+        expect(() => {
+            SignedNano64.timeRangeToBigInts(2000, 1000);
+        }).toThrow("tsStart must be less than or equal to tsEnd.");
+
+        // Case 2: Negative timestamp
+        expect(() => {
+            SignedNano64.timeRangeToBigInts(-100, 1000);
+        }).toThrow("Timestamps must be non-negative.");
+
+        // Case 3: Timestamp out of 44-bit range
+        const limit = Number((1n << TIMESTAMP_BITS));
+        expect(() => {
+            SignedNano64.timeRangeToBigInts(0, limit);
+        }).toThrow(`Timestamp exceeds the ${Number(TIMESTAMP_BITS)}-bit range.`);
+    });
 });
 
 /*

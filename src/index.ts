@@ -498,7 +498,7 @@ export class Nano64 {
  * A utility class for converting `Nano64` IDs to and from signed 64-bit BigInts.
  *
  * This is particularly useful when storing Nano64 IDs in database columns that use
- * a signed 64-bit integer type, such as PostgreSQL's `BIGINT`.
+ * a signed 64-bit integer type, such as PostgreSQL's `BIGINT` and SQLite's `INTEGER`.
  *
  * The conversion method used (`value - 2^63`) ensures that the natural sort order
  * of the IDs is preserved, allowing for efficient, indexed range queries.
@@ -520,7 +520,7 @@ export class SignedNano64 {
      * @param id The `Nano64` instance to convert.
      * @returns A signed `bigint` that preserves the sort order of the original ID.
      */
-    static fromNano64(id: Nano64): bigint {
+    static fromId(id: Nano64): bigint {
         return id.value - this.SIGN_BIT;
     }
 
@@ -533,7 +533,7 @@ export class SignedNano64 {
      * @param signedBigInt The signed `bigint` value from the database.
      * @returns A new `Nano64` instance.
      */
-    static toNano64(signedBigInt: bigint): Nano64 {
+    static toId(signedBigInt: bigint): Nano64 {
         const unsignedValue = signedBigInt + this.SIGN_BIT;
         return Nano64.fromBigInt(unsignedValue);
     }
@@ -543,13 +543,13 @@ export class SignedNano64 {
      * based on a timestamp range.
      *
      * The returned values can be used directly in a SQL `BETWEEN` clause
-     * on a signed `BIGINT` column.
+     * on a signed integer column.
      *
      * @param tsStart The beginning of the time range in milliseconds (inclusive).
      * @param tsEnd The end of the time range in milliseconds (inclusive).
      * @returns An object containing `start` and `end` signed `bigint` values for the query.
      */
-    static timeRangeToSignedBigInts(tsStart: number, tsEnd: number): [bigint, bigint] {
+    static timeRangeToBigInts(tsStart: number, tsEnd: number): [bigint, bigint] {
         if (tsStart < 0 || tsEnd < 0) throw new Error("Timestamps must be non-negative.");
         if (tsStart > tsEnd) throw new Error("tsStart must be less than or equal to tsEnd.");
 
@@ -564,5 +564,29 @@ export class SignedNano64 {
 
         // Convert the unsigned bounds to signed bounds
         return [unsignedStart - this.SIGN_BIT, unsignedEnd - this.SIGN_BIT]
+    }
+
+    /**
+     * Extracts the millisecond timestamp directly from a signed 64-bit BigInt.
+     *
+     * This is a performance-optimized method that avoids the overhead of creating
+     * an intermediate `Nano64` object when you only need the timestamp. It combines
+     * the conversion and extraction steps into a single operation.
+     *
+     * @param signedBigInt The signed 64-bit integer value, typically from a database.
+     * @returns The UNIX epoch timestamp in milliseconds.
+     */
+    static getTimestamp(signedBigInt: bigint): number {
+        // 1. Convert the signed value back to its original unsigned representation.
+        const unsignedValue = signedBigInt + this.SIGN_BIT;
+
+        // 2. Right-shift the unsigned value to discard the 20 random bits,
+        //    moving the timestamp into the least significant position.
+        const timestampBigInt = unsignedValue >> RANDOM_BITS;
+
+        // 3. Convert the BigInt result to a standard number.
+        //    Since the timestamp is only 44 bits, it will safely fit in a
+        //    JavaScript number without loss of precision.
+        return Number(timestampBigInt);
     }
 }
