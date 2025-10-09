@@ -75,6 +75,31 @@ function rangeU64(tsStart: number, tsEnd: number): { lo: bigint; hi: bigint } {
     return { lo: lo & MASK64, hi: hi & MASK64 };
 }
 
+
+/**
+ * A **non-secure** random number generator that uses `Math.random()`.
+ *
+ * ⚠️ **Warning:** The output of this function is predictable and is **not cryptographically secure**.
+ * Do not use this in production for any security-sensitive applications. It is intended for
+ * testing, development, or performance benchmarking purposes only.
+ *
+ * @param bits The number of random bits to generate (must be between 1 and 32).
+ * @returns A number containing the requested number of random bits.
+ */
+export const veryUnsafeRNG: RNG = (bits: number): number => {
+    if (bits <= 0 || bits > 32) {
+        throw new Error("RNG bits must be between 1 and 32.");
+    }
+
+    // Math.random() produces a float in the range [0, 1).
+    // We scale it by 2^bits to get a float in the range [0, 2^bits).
+    const max = Math.pow(2, bits);
+
+    // Math.floor() converts the float to an integer, resulting in an
+    // integer from 0 to (2^bits - 1), which is exactly the range we need.
+    return Math.floor(Math.random() * max);
+};
+
 /**
  * @private Default cryptographically-secure RNG using the Web Crypto API.
  * @throws If `bits` is outside the 1-32 range or the Web Crypto API is unavailable.
@@ -192,6 +217,64 @@ export class EncryptedNano64 {
 }
 
 /**
+ * A stateful generator that produces strictly increasing `Nano64` IDs.
+ *
+ * This class encapsulates the state required for monotonic generation, allowing multiple
+ * independent generators to run in parallel without interfering with each other.
+ */
+export class MonotonicNano64Generator {
+
+    private static readonly RANDOM_MASK = (1n << RANDOM_BITS) - 1n;
+
+    constructor(
+        /** Provide a minimum starting timestamp value. */
+        private lastTimestamp = -1,
+        /** Provide the starting value for the sequence generator */
+        private lastRandom = -1n
+    ) {
+
+    }
+
+    /**
+     * Generates the next `Nano64` ID in the monotonic sequence.
+     *
+     * If called multiple times within the same millisecond, the random part is incremented.
+     * If the random part overflows, the timestamp is advanced by 1 ms to ensure ordering.
+     * This method is protected against system clock rollbacks.
+     *
+     * @param timestamp The UNIX epoch milliseconds to use. Defaults to `Date.now()`.
+     * @param rng The random number generator, used only when the timestamp advances.
+     * @returns A new, monotonically increasing `Nano64` instance.
+     */
+    next(timestamp: number = Date.now(), rng: RNG = defaultRNG): Nano64 {
+        if (timestamp < 0) throw new Error("Timestamp cannot be negative.");
+        if (timestamp >= 2 ** 44) throw new Error("Timestamp exceeds 44-bit range.");
+
+        const t = Math.max(timestamp, this.lastTimestamp);
+
+        let rand: bigint;
+        if (t === this.lastTimestamp) {
+            rand = (this.lastRandom + 1n) & MonotonicNano64Generator.RANDOM_MASK;
+            if (rand === 0n) {
+                const nextTimestamp = t + 1;
+                this.lastTimestamp = nextTimestamp;
+                this.lastRandom = 0n;
+                const value = (BigInt(nextTimestamp) << RANDOM_BITS);
+                return new Nano64(value);
+            }
+        } else {
+            rand = BigInt(rng(Number(RANDOM_BITS)));
+        }
+
+        this.lastTimestamp = t;
+        this.lastRandom = rand;
+
+        const value = (BigInt(t) << RANDOM_BITS) | rand;
+        return new Nano64(value);
+    }
+}
+
+/**
  * A 64-bit, time-sortable unique identifier.
  *
  * It consists of a 44-bit timestamp (epoch milliseconds) and a 20-bit random field,
@@ -245,13 +328,13 @@ export class Nano64 {
      * @param tsEnd The end of the time range in milliseconds (inclusive).
      * @returns An object containing `start` and `end` `Uint8Array`s for the query.
      */
-    static timeRangeToBytes(tsStart: number, tsEnd: number): { start: Uint8Array; end: Uint8Array } {
+    static timeRangeToBytes(tsStart: number, tsEnd: number): [Uint8Array, Uint8Array] {
         const { lo, hi } = rangeU64(tsStart, tsEnd);
-        return { start: BigIntHelpers.toBytesBE(lo), end: BigIntHelpers.toBytesBE(hi) };
+        return [ BigIntHelpers.toBytesBE(lo), BigIntHelpers.toBytesBE(hi) ];
     }
 
     /**
-     * Generates a new `Nano64` ID.
+     * Generates a new `Nano64` ID. 
      *
      * @param timestamp The UNIX epoch milliseconds to use. Defaults to `Date.now()`.
      * @param rng The random number generator to use. Defaults to a cryptographically secure one.
@@ -268,10 +351,17 @@ export class Nano64 {
         return new Nano64(value);
     }
 
-    // --- State for Monotonic Generator ---
-    private static lastTimestamp = -1;
-    private static lastRandom = -1n;
-    private static readonly RANDOM_MASK = (1n << RANDOM_BITS) - 1n;
+    /**
+     * Create a new monotonic factory with it's own state.
+     * 
+     * @returns Monotonic Generator Factory
+     */
+    static monotonicFactory(startingTimeStamp = -1, startingRandomValue = -1n): MonotonicNano64Generator {
+        return new MonotonicNano64Generator(startingTimeStamp, startingRandomValue);
+    }
+
+    /** Internal default monotonic factory */
+    private static defaultMonoFact = new MonotonicNano64Generator();
 
     /**
      * Generates a new `Nano64` ID that is guaranteed to be monotonically increasing.
@@ -283,36 +373,7 @@ export class Nano64 {
      * @returns A new, monotonically increasing `Nano64` instance.
      */
     static generateMonotonic(timestamp: number = Date.now(), rng: RNG = defaultRNG): Nano64 {
-        if (timestamp < 0) throw new Error("Timestamp cannot be negative.");
-        if (timestamp >= 2 ** 44) throw new Error("Timestamp exceeds 44-bit range.");
-
-        // Ensure the current timestamp is at least as large as the last one used.
-        const t = Math.max(timestamp, this.lastTimestamp);
-
-        let rand: bigint;
-        if (t === this.lastTimestamp) {
-            // Same millisecond: increment the last random value.
-            rand = (this.lastRandom + 1n) & this.RANDOM_MASK;
-            if (rand === 0n) {
-                // Random part overflowed! Increment the timestamp by 1ms and reset random to 0.
-                // This preserves the monotonic guarantee.
-                const nextTimestamp = t + 1;
-                this.lastTimestamp = nextTimestamp;
-                this.lastRandom = 0n;
-                const value = (BigInt(nextTimestamp) << RANDOM_BITS) | 0n;
-                return new Nano64(value);
-            }
-        } else {
-            // New millisecond: generate a new random value.
-            rand = BigInt(rng(Number(RANDOM_BITS)));
-        }
-
-        // Save the state for the next call.
-        this.lastTimestamp = t;
-        this.lastRandom = rand;
-
-        const value = (BigInt(t) << RANDOM_BITS) | rand;
-        return new Nano64(value);
+        return this.defaultMonoFact.next(timestamp, rng);
     }
 
     /**
@@ -429,5 +490,79 @@ export class Nano64 {
                 return this.fromEncryptedBytes(bytes);
             }
         };
+    }
+}
+
+
+/**
+ * A utility class for converting `Nano64` IDs to and from signed 64-bit BigInts.
+ *
+ * This is particularly useful when storing Nano64 IDs in database columns that use
+ * a signed 64-bit integer type, such as PostgreSQL's `BIGINT`.
+ *
+ * The conversion method used (`value - 2^63`) ensures that the natural sort order
+ * of the IDs is preserved, allowing for efficient, indexed range queries.
+ */
+export class SignedNano64 {
+    /**
+     * The sign bit for a 64-bit integer, equal to `2^63`.
+     * This constant is used to flip the sign by offsetting the unsigned value.
+     * @private
+     */
+    private static readonly SIGN_BIT = 1n << 63n;
+
+    /**
+     * Converts a `Nano64` object into a signed 64-bit BigInt.
+     *
+     * This is the format required for storing sortable IDs in a standard
+     * signed `BIGINT` database column.
+     *
+     * @param id The `Nano64` instance to convert.
+     * @returns A signed `bigint` that preserves the sort order of the original ID.
+     */
+    static fromNano64(id: Nano64): bigint {
+        return id.value - this.SIGN_BIT;
+    }
+
+    /**
+     * Creates a `Nano64` object from a signed 64-bit BigInt.
+     *
+     * This is used to reconstruct a `Nano64` object from a value retrieved
+     * from a database.
+     *
+     * @param signedBigInt The signed `bigint` value from the database.
+     * @returns A new `Nano64` instance.
+     */
+    static toNano64(signedBigInt: bigint): Nano64 {
+        const unsignedValue = signedBigInt + this.SIGN_BIT;
+        return Nano64.fromBigInt(unsignedValue);
+    }
+
+    /**
+     * Generates the start and end signed BigInt values for a database query
+     * based on a timestamp range.
+     *
+     * The returned values can be used directly in a SQL `BETWEEN` clause
+     * on a signed `BIGINT` column.
+     *
+     * @param tsStart The beginning of the time range in milliseconds (inclusive).
+     * @param tsEnd The end of the time range in milliseconds (inclusive).
+     * @returns An object containing `start` and `end` signed `bigint` values for the query.
+     */
+    static timeRangeToSignedBigInts(tsStart: number, tsEnd: number): [bigint, bigint] {
+        if (tsStart < 0 || tsEnd < 0) throw new Error("Timestamps must be non-negative.");
+        if (tsStart > tsEnd) throw new Error("tsStart must be less than or equal to tsEnd.");
+
+        // Perform the calculation using BigInts to avoid 32-bit truncation.
+        const maxTs = Number((1n << TIMESTAMP_BITS) - 1n);
+        
+        if (tsStart > maxTs || tsEnd > maxTs) throw new Error(`Timestamp exceeds the ${Number(TIMESTAMP_BITS)}-bit range.`);
+        
+        const RAND_MAX = (1n << RANDOM_BITS) - 1n;
+        const unsignedStart = (BigInt(tsStart) << RANDOM_BITS);
+        const unsignedEnd = (BigInt(tsEnd) << RANDOM_BITS) | RAND_MAX;
+
+        // Convert the unsigned bounds to signed bounds
+        return [unsignedStart - this.SIGN_BIT, unsignedEnd - this.SIGN_BIT]
     }
 }

@@ -62,7 +62,7 @@ console.log(Nano64.compare(a, b)); // -1
 
 ### AES-GCM encryption
 
-Encrypt and decrypt IDs to hide the embedded timestamp from public view.  Encryped IDs can be safely exposed to the internet without providing any timestamp information for the source ID.
+Encrypt and decrypt IDs to hide the embedded timestamp from public view.  Encrypted IDs can be safely shared to the internet without exposing any timestamp information of the source ID.
 
 ```ts
 const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
@@ -151,7 +151,7 @@ insert.run(id3.toBytes(), "Event from now");
 const tsEnd = Date.now();
 const tsStart = tsEnd - 1500;
 
-const { start, end } = Nano64.timeRangeToBytes(tsStart, tsEnd);
+const [ start, end ] = Nano64.timeRangeToBytes(tsStart, tsEnd);
 
 const query = db.prepare("SELECT * FROM events WHERE id BETWEEN ? AND ?");
 const results = query.all(start, end);
