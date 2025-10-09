@@ -1,10 +1,11 @@
 # Change Log
 
-## 1.3.0
+## 1.3.0 Oct 9, 2025
 BREAKING: `timeRangeToBytes` now returns a tuple instead of an object.
 README fixes.
 Created class `MonotonicNano64Generator` for generating monotonic Ids.
 Created class `SignedNano64` for interacting with signed integer database column types.
+Added README for signed integer usage in databases.
 
 ## 1.2.0 Oct 8, 2025
 Implemented new `timeRangeToBytes` function designed to assist with database range queries.
