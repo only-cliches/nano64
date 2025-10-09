@@ -1,39 +1,42 @@
 ### Storing Nano64 IDs as Signed Integers
 
-While [storing IDs as binary](https://github.com/only-cliches/nano64#database-usage) is the most direct method, most databases and frameworks work more easily with native integer types. It's possible to store `Nano64` IDs in a standard signed 64-bit integer column (`BIGINT` or `INTEGER`).
+While [storing IDs as binary](https://github.com/only-cliches/nano64#database-usage) is the most direct method, many databases, ORMs, and drivers work more easily with native integer types.
 
-The **`SignedNano64`** utility class is designed for this purpose. It converts IDs to and from a signed `bigint` format while **perfectly preserving their sort order**, which is critical for time-based range queries.
+The **`SignedNano64`** utility class bridges this gap by converting IDs to and from signed 64-bit integers (`BIGINT` or `INTEGER`) while **perfectly preserving their sort order** — which is critical for time-based range queries.
 
------
+---
 
-> ⚠️ **CRITICAL WARNING**
+> ⚠️ **Critical Warning**
 >
-> The signed `bigint` representation is **only for database storage**. Never pass a signed integer from your database directly to `Nano64.fromBigInt()` or the `Nano64` constructor. Doing so will completely break the sort order and lead to incorrect data or errors.
->
-> **Always** use `SignedNano64.fromNano64()` to convert IDs **before** writing to the database, and **always** use `SignedNano64.toNano64()` to convert them back **after** reading from the database.
+> ⚠️ **Never use a signed bigint value directly with `Nano64`.**  
+> The signed format is **only for storage**, not decoding.  
+> Passing an integer from your database to `Nano64.fromBigInt()` or the `Nano64` constructor will **silently** produce invalid results and destroy sort order.  
+>  
+> ✅ Always use `SignedNano64.fromId()` **before writing**, and  
+> ✅ Always use `SignedNano64.toId()` **after reading**.
 
------
+---
 
 ### Recommended Column Types
 
 | DBMS | Column Type | Notes |
 | :--- | :--- | :--- |
-| SQLite | `INTEGER` | The native type for storing signed integers up to 8 bytes. |
-| PostgreSQL | `BIGINT` | The standard 64-bit signed integer type. Alias: `INT8`. |
-| MySQL 8+ | `BIGINT` | The standard 64-bit signed integer type. |
+| SQLite | `INTEGER` | Native signed 8-byte integer type. |
+| PostgreSQL | `BIGINT` | Standard 64-bit signed integer. Alias: `INT8`. |
+| MySQL 8+ | `BIGINT` | Standard 64-bit signed integer type. |
 | MariaDB | `BIGINT` | Same as MySQL. |
-| SQL Server | `BIGINT` | The standard 64-bit signed integer type. |
-| Oracle | `NUMBER(19)` | The standard way to represent a 64-bit signed integer. |
-| CockroachDB | `BIGINT` | PostgreSQL-compatible 64-bit signed integer. Alias: `INT8`.|
-| DuckDB | `BIGINT` | The standard 64-bit signed integer type. Alias: `INT64`. |
+| SQL Server | `BIGINT` | Standard 64-bit signed integer type. |
+| Oracle | `NUMBER(19)` | Standard representation of a 64-bit signed integer. |
+| CockroachDB | `BIGINT` | PostgreSQL-compatible 64-bit integer. Alias: `INT8`. |
+| DuckDB | `BIGINT` | Standard 64-bit signed integer type. Alias: `INT64`. |
 
------
+All of these compare signed integers numerically, preserving Nano64’s natural order when stored through `SignedNano64`.
 
-### SQLite Example
+---
 
-This example demonstrates the correct workflow for storing and querying IDs as signed integers.
+### Example: SQLite with Signed Storage
 
-```js
+```ts
 import Database from "better-sqlite3";
 import { Nano64, SignedNano64 } from "nano64";
 
@@ -44,29 +47,29 @@ db.exec("CREATE TABLE events (id INTEGER PRIMARY KEY, message TEXT)");
 // 2. Generate Nano64 IDs as usual
 const id1 = Nano64.generate(Date.now() - 2000);
 const id2 = Nano64.generate(Date.now() - 1000);
-const id3 = Nano64.generate(Date.now());  
+const id3 = Nano64.generate(Date.now());
 
 // 3. Convert IDs to signed bigints before inserting
 const insert = db.prepare("INSERT INTO events (id, message) VALUES (?, ?)");
-insert.run(SignedNano64.fromNano64(id1), "Event from 2s ago");
-insert.run(SignedNano64.fromNano64(id2), "Event from 1s ago");
-insert.run(SignedNano64.fromNano64(id3), "Event from now");
+// using the SigneNano64 class to convert and store the Ids
+insert.run(SignedNano64.fromId(id1), "Event from 2s ago");
+insert.run(SignedNano64.fromId(id2), "Event from 1s ago");
+insert.run(SignedNano64.fromId(id3), "Event from now");
 
-// 4. Generate a signed bigint range for the query
+// 4. Generate signed bigint bounds for a time range
 const tsEnd = Date.now();
 const tsStart = tsEnd - 1500;
-const [ start, end] = SignedNano64.timeRangeToSignedBigInts(tsStart, tsEnd);
+const [start, end] = SignedNano64.timeRangeToBigInts(tsStart, tsEnd);
 
-// 5. Query using the signed bigint bounds
+// 5. Query using signed bigint range
 const query = db.prepare("SELECT * FROM events WHERE id BETWEEN ? AND ?");
 const results = query.all(start, end);
 
-// The query correctly finds the last two records
 console.log(`Found ${results.length} events between ${new Date(tsStart).toISOString()} and ${new Date(tsEnd).toISOString()}`);
 
 for (const row of results) {
-  // 6. Convert the signed bigint from the DB back to a Nano64 object
-  const found = SignedNano64.toNano64(row.id);
+  // 6. Convert signed bigint from DB back into a Nano64
+  const found = SignedNano64.toId(row.id);
   console.log(`- ${found.toHex()} @ ${found.toDate().toISOString()} → ${row.message}`);
 }
 ```
