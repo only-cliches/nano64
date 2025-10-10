@@ -231,7 +231,7 @@ All tests are written in Vitest and cover:
 ## Unofficial Ports
 
 * [Go](https://github.com/Codycody31/go-nano64)
-
+* [Rust](https://github.com/matthewoestreich/rs-nano64)
 
 ## License
 

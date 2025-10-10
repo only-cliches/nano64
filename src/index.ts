@@ -391,8 +391,8 @@ export class Nano64 {
         return this._u === other._u;
     }
 
-    /** Creates a `Nano64` from any `bigint`. The value is masked to the u64 range. */
-    static fromBigInt(v: bigint): Nano64 {
+    /** Creates a `Nano64` from an unsigned `bigint`. The value is masked to the u64 range. */
+    static fromUnsignedBigInt(v: bigint): Nano64 {
         return new Nano64(v & MASK64);
     }
 
@@ -496,7 +496,7 @@ export class Nano64 {
 
 /**
  * A utility class for converting `Nano64` IDs to and from signed 64-bit BigInts.
- *
+ * 
  * This is particularly useful when storing Nano64 IDs in database columns that use
  * a signed 64-bit integer type, such as PostgreSQL's `BIGINT` and SQLite's `INTEGER`.
  *
@@ -535,7 +535,7 @@ export class SignedNano64 {
      */
     static toId(signedBigInt: bigint): Nano64 {
         const unsignedValue = signedBigInt + this.SIGN_BIT;
-        return Nano64.fromBigInt(unsignedValue);
+        return Nano64.fromUnsignedBigInt(unsignedValue);
     }
 
     /**
