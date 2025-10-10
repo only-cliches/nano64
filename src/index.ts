@@ -391,7 +391,16 @@ export class Nano64 {
         return this._u === other._u;
     }
 
-    /** Creates a `Nano64` from an unsigned `bigint`. The value is masked to the u64 range. */
+    /**
+     * Creates a `Nano64` from an unsigned `bigint`. The value is masked to the u64 range.
+     *
+     * ⚠️⚠️ **WARNING:** ⚠️⚠️
+     * This method is for **unsigned** integers only. Passing a signed `bigint`
+     * (e.g., from a database `BIGINT` column using `SignedNano64.fromId`) will misinterpret its value, breaking
+     * the timestamp, sort-ordering and leading to incorrect data.
+     *
+     * To convert a signed `bigint` back to a `Nano64`, you **must** use `SignedNano64.toId()`.
+     */
     static fromUnsignedBigInt(v: bigint): Nano64 {
         return new Nano64(v & MASK64);
     }

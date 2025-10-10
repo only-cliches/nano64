@@ -6,7 +6,7 @@ This reduces index and I/O overhead while preserving cryptographic-grade randomn
 [![GitHub Repo stars](https://img.shields.io/github/stars/only-cliches/nano64)](https://github.com/only-cliches/nano64)
 [![NPM Version](https://img.shields.io/npm/v/nano64)](https://www.npmjs.com/package/nano64)
 [![JSR Version](https://img.shields.io/jsr/v/%40onlycliches/nano64)](https://jsr.io/@onlycliches/nano64)
-[![npm package minimized gzipped size](https://badgen.net/bundlephobia/minzip/nano64?cache=true)](https://bundlephobia.com/package/nano64@latest)
+[![npm package minimized gzipped size](https://badgen.net/bundlephobia/minzip/nano64?v=131)](https://bundlephobia.com/package/nano64@latest)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 

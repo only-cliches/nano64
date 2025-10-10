@@ -10,7 +10,7 @@ The **`SignedNano64`** utility class bridges this gap by converting IDs to and f
 >
 > ⚠️ **Never use a signed bigint value directly with `Nano64`.**  
 > The signed format is **only for storage**, not decoding.  
-> Passing an integer from your database to `Nano64.fromBigInt()` or the `Nano64` constructor will **silently** produce invalid results and destroy sort order.  
+> Passing an integer from your database to `Nano64.fromUnsignedBigInt()` or the `Nano64` constructor will lead to an incorrect timestamp and destroy sort order.
 >  
 > ✅ Always use `SignedNano64.fromId()` **before writing**, and  
 > ✅ Always use `SignedNano64.toId()` **after reading**.
@@ -73,3 +73,4 @@ for (const row of results) {
   console.log(`- ${found.toHex()} @ ${found.toDate().toISOString()} → ${row.message}`);
 }
 ```
+

@@ -1,7 +1,8 @@
 # Change Log
 
-## 1.3.1
+## 1.3.1 Oct 10, 2025
 BREAKING: Changed `fromBigInt` to `fromUnsignedBigInt` to avoid confusion with the `SignedNano64` methods.
+Added README and doc comments to reduce likelyhood of unsigned/signed misuse.
 
 ## 1.3.0 Oct 9, 2025
 BREAKING: `timeRangeToBytes` now returns a tuple instead of an object.

@@ -70,7 +70,7 @@ describe("Nano64 core", () => {
 
 	it("compares and checks equality correctly", () => {
 		const a = Nano64.generate(1000);
-		const b = Nano64.fromBigInt(a.value); // Exact copy
+		const b = Nano64.fromUnsignedBigInt(a.value); // Exact copy
 		const c = Nano64.generate(2000);
 
 		expect(a.equals(b)).toBe(true);
