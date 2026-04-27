@@ -1,7 +1,7 @@
 # Nano64 — 64-bit Time-Sortable Identifiers for TypeScript
 
-**Nano64** is a lightweight library for generating time-sortable, globally unique IDs that provide similar practical guarantees to ULID or UUID while using half the storage.  
-This reduces index and I/O overhead while preserving cryptographic-grade randomness.  Includes optional monotonic sequencing and AES-GCM encryption for timestamp privacy.
+**Nano64** is a lightweight library for generating compact, time-sortable IDs with an 8-byte storage footprint.
+It reduces index and I/O overhead by trading the much larger entropy budget of ULID/UUID for a 44-bit millisecond timestamp plus a 20-bit random field. Includes optional monotonic sequencing and AES-GCM encryption for timestamp privacy.
 
 [![GitHub Repo stars](https://img.shields.io/github/stars/only-cliches/nano64)](https://github.com/only-cliches/nano64)
 [![NPM Version](https://img.shields.io/npm/v/nano64)](https://www.npmjs.com/package/nano64)
@@ -14,13 +14,13 @@ This reduces index and I/O overhead while preserving cryptographic-grade randomn
 ## Features
 
 - **Time-sortable:** IDs naturally order by creation time.  
-- **Compact:** 8 bytes (16 hex characters).  
+- **Compact:** 8 bytes (16 hex digits, or 17 characters with the display dash).
 - **Deterministic layout:** `[63‥20]=timestamp`, `[19‥0]=random`.  
-- **Collision-resistant:** ~1 % collision probability at 145 000 IDs/s.  
+- **Collision-aware:** ~1 % collision probability at 145 IDs generated in the same millisecond.
 - **Cross-database-safe:** Big-endian bytes preserve order in SQLite, PostgreSQL, MySQL, and others.  
 - **AES-GCM encryption:** Optionally hides the embedded timestamp.  
 - **Unsigned canonical form:** Portable numeric representation `0‥2⁶⁴ − 1`.  
-- **Typed and tested:** 100 % TypeScript with full Vitest coverage.
+- **Typed and tested:** 100 % TypeScript with Vitest coverage.
 
 
 ## Installation
@@ -62,7 +62,7 @@ console.log(Nano64.compare(a, b)); // -1
 
 ### AES-GCM encryption
 
-Encrypt and decrypt IDs to hide the embedded timestamp from public view.  Encrypted IDs can be safely shared to the internet without exposing any timestamp information of the source ID.
+Encrypt and decrypt IDs to hide the embedded timestamp from public view. Encrypted IDs hide the source timestamp when the AES-GCM key is managed securely; they are not a substitute for authorization checks.
 
 ```ts
 const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
@@ -94,11 +94,20 @@ console.log(restored.id.value === wrapped.id.value); // true
 | Encodes creation time  | ✅                                        | ✅                           | ❌                       | ✅                            |
 | Can hide timestamp     | ✅ via AES-GCM encryption                  | ⚠️ Not built-in             | ✅ (no time field)       | ❌ Not by design              |
 | Database sort order    | ✅ Stable with big-endian BLOB             | ✅ (lexical)                 | ❌ Random                | ✅ Numeric                    |
-| Cryptographic strength | 20-bit random, optional AES               | 80-bit random               | 122-bit random          | None (deterministic)         |
+| Cryptographic strength | 20-bit random; not for secrets            | 80-bit random               | 122-bit random          | None (deterministic)         |
 | Dependencies           | None (crypto optional)                    | None                        | None                    | Central service or worker ID |
 | Target use             | Compact, sortable, optionally private IDs | Human-readable sortable IDs | Pure random identifiers | Distributed service IDs      |
 
-> Nano64 keeps the chronological behavior of ULIDs but in 64 bits instead of 128, cutting key size by half without sacrificing sort order or safety.
+> Nano64 keeps the chronological behavior of ULIDs but in 64 bits instead of 128, cutting key size by half while accepting a lower random-entropy budget.
+
+
+## Security and Uniqueness Boundaries
+
+Raw Nano64 IDs contain only 20 random bits. They are appropriate for compact, time-sortable database keys where collision risk is understood and handled by normal uniqueness constraints or monotonic generation.
+
+Do **not** use raw Nano64 values as session tokens, password reset tokens, API keys, invitation secrets, CSRF tokens, or other bearer credentials. Use UUIDv4, a larger random token, or another purpose-built secret format for those cases.
+
+The AES-GCM wrapper hides the embedded timestamp, but possession of a valid encrypted ID should never grant access by itself. Treat it as an opaque identifier and enforce authorization separately.
 
 
 ## Database Usage
@@ -178,7 +187,7 @@ Creates a new ID with optional timestamp and RNG.
 
 Same as `generate`, but strictly increasing within the same millisecond.
 
-### `Nano64.fromHex(hex)` / `fromBytes(bytes)` / `fromBigIntUnsigned(v)`
+### `Nano64.fromHex(hex)` / `fromBytes(bytes)` / `fromUnsignedBigInt(v)`
 
 Parse back into a Nano64.
 

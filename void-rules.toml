@@ -1,0 +1,86 @@
+# void-rules.toml — policy for what the AI agent can do in this project.
+# Commit this file to your repository. void-claw reads it but never pushes
+# changes back during workspace sync.
+#
+# Preferred place for *human/LLM instructions*:
+# llm_instructions = """
+# """
+#
+# ── Hostdo (host-side command execution) ─────────────────────────────────────
+#
+# default_policy: what happens when a command doesn't match any rule below.
+#   auto   — run without prompting (use with caution)
+#   prompt — ask the developer in the TUI (default)
+#   deny   — reject silently
+#
+# Passthrough command (exact argv match, auto-approved):
+#   [[hostdo.commands]]
+#   argv = ["cargo", "test"] # run inside container with `hostdo cargo test`
+#   cwd = "$WORKSPACE"         # execution cwd only, not part of approval matching
+#   approval_mode = "auto"
+#
+# Command alias (agent sends `hostdo tests`, expands server-side):
+#   [hostdo.command_aliases]
+#   tests = "cargo test" # run inside container with `hostdo test`
+#   build = { cmd = "cargo build --release", cwd = "$WORKSPACE" }
+#
+# $WORKSPACE = workspace path on the host.
+
+# ── Network (HTTP/HTTPS proxy policy) ────────────────────────────────────────
+#
+# Coder-style allowlist rules. If no rule matches, request is prompted.
+# Rule format:
+#   method=GET,POST domain=api.example.com path=/v1/*,/health
+#
+# Domain matching:
+# - `domain=example.com` exact only
+# - `domain=*.example.com` subdomains only (not the apex)
+#
+# Path matching:
+# - exact (`/v1/users`)
+# - wildcard (`/v1/*`)
+
+[hostdo]
+default_policy = "prompt"
+commands = []
+
+[hostdo.command_aliases.yarn_test]
+cmd = "yarn test"
+cwd = "$WORKSPACE"
+
+[hostdo.command_aliases.build]
+cmd = "npm run build"
+cwd = "$WORKSPACE"
+
+[hostdo.command_aliases.bun_test]
+cmd = "bun test"
+cwd = "$WORKSPACE"
+
+[hostdo.command_aliases.lint]
+cmd = "npm run lint"
+cwd = "$WORKSPACE"
+
+[hostdo.command_aliases.dev]
+cmd = "npm run dev"
+cwd = "$WORKSPACE"
+
+[hostdo.command_aliases.install]
+cmd = "npm install"
+cwd = "$WORKSPACE"
+
+[hostdo.command_aliases.test]
+cmd = "npm run test"
+cwd = "$WORKSPACE"
+
+[hostdo.command_aliases.pnpm_test]
+cmd = "pnpm test"
+cwd = "$WORKSPACE"
+
+[network]
+allowlist = [
+    "domain=raw.githubusercontent.com",
+    "domain=api.github.com",
+    "domain=github.com",
+    "domain=registry.npmjs.org",
+    "domain=nodejs.org",
+]

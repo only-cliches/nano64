@@ -6,12 +6,12 @@
 | ¹Collision probability reaches ~1% after generating ~145 IDs within the same millisecond.
 | The 20 random bits provide 2^20 = 1,048,576 unique combinations per millisecond.
 |
-| Timestamp field is **44 bits**, providing a ~557-year range from the UNIX epoch (1970-01-01 to ~2527).
+| Timestamp field is **44 bits**, providing a ~557-year range from the UNIX epoch (1970-01-01 to 2527-05-22).
 | Layout: [63‥20] Timestamp (ms) • [19‥0] Random
 |
 | Canonical representation: **unsigned 64-bit** integer (BigInt).
 | Wire format: 8-byte big-endian unsigned integer.
-| String format: 16-character uppercase hex string (e.g., "18B9E080D2D-54321").
+| String format: 16 uppercase hex digits, displayed as 11-5 dashed hex (e.g., "18B9E080D2D-54321").
 */
 
 /**
@@ -30,6 +30,15 @@ export const RANDOM_BITS = 20n as const;
 /** Mask to extract the 44-bit timestamp from a Nano64 ID. */
 const TIMESTAMP_MASK = (1n << TIMESTAMP_BITS) - 1n;
 
+/** The largest timestamp representable by Nano64's 44-bit timestamp field. */
+const MAX_TIMESTAMP = Number(TIMESTAMP_MASK);
+
+/** Mask to extract the 20-bit random field from a Nano64 ID. */
+const RANDOM_MASK = (1n << RANDOM_BITS) - 1n;
+
+/** The largest random value accepted by Nano64's 20-bit random field. */
+const MAX_RANDOM = Number(RANDOM_MASK);
+
 // --- Constants for 64-bit Arithmetic ---
 
 /** The total number of bits in a Nano64 ID. */
@@ -37,6 +46,21 @@ const TOTAL_BITS = 64n;
 
 /** Mask to ensure all values fit within an unsigned 64-bit integer range (0 to 2^64 - 1). */
 const MASK64 = (1n << TOTAL_BITS) - 1n;
+
+/** The sign bit for a 64-bit integer, equal to `2^63`. */
+const I64_SIGN_BIT = 1n << 63n;
+
+// AES-GCM returns ciphertext and the authentication tag as one buffer. Nano64
+// encrypted payloads keep the IV first so the whole value can stay self-contained.
+const NANO64_BYTES = 8;
+const AES_GCM_IV_BYTES = 12;
+const AES_GCM_TAG_BYTES = 16;
+const ENCRYPTED_PAYLOAD_BYTES = AES_GCM_IV_BYTES + NANO64_BYTES + AES_GCM_TAG_BYTES;
+
+/** Reused scratch buffer for the default cryptographic RNG. */
+const RNG_WORD = new Uint32Array(1);
+
+let cachedCrypto: Crypto | undefined;
 
 // --- Type Definitions ---
 
@@ -64,15 +88,44 @@ export type Clock = () => number;
  */
 function rangeU64(tsStart: number, tsEnd: number): { lo: bigint; hi: bigint } {
     if (tsStart < 0 || tsEnd < 0) throw new Error("Timestamps must be non-negative.");
+    if (!Number.isSafeInteger(tsStart) || !Number.isSafeInteger(tsEnd)) throw new Error("Timestamps must be safe integers.");
     if (tsStart > tsEnd) throw new Error("tsStart must be less than or equal to tsEnd.");
 
-    const maxTs = Number(TIMESTAMP_MASK);
-    if (tsStart > maxTs || tsEnd > maxTs) throw new Error(`Timestamp exceeds the ${Number(TIMESTAMP_BITS)}-bit range.`);
+    if (tsStart > MAX_TIMESTAMP || tsEnd > MAX_TIMESTAMP) throw new Error(`Timestamp exceeds the ${Number(TIMESTAMP_BITS)}-bit range.`);
 
-    const RAND_MAX = (1n << RANDOM_BITS) - 1n;
     const lo = (BigInt(tsStart) << RANDOM_BITS);      // Start of the range has random bits set to 0.
-    const hi = (BigInt(tsEnd) << RANDOM_BITS) | RAND_MAX; // End of the range has random bits set to 1.
+    const hi = (BigInt(tsEnd) << RANDOM_BITS) | RANDOM_MASK; // End of the range has random bits set to 1.
     return { lo: lo & MASK64, hi: hi & MASK64 };
+}
+
+function assertTimestamp(timestamp: number, label = "Timestamp"): void {
+    if (!Number.isSafeInteger(timestamp)) throw new Error(`${label} must be a safe integer.`);
+    if (timestamp < 0) throw new Error(`${label} cannot be negative.`);
+    if (timestamp > MAX_TIMESTAMP) throw new Error(`${label} exceeds the ${Number(TIMESTAMP_BITS)}-bit range.`);
+}
+
+function randomField(rng: RNG): bigint {
+    const value = rng(Number(RANDOM_BITS));
+    // Custom RNGs are user-supplied; reject values that would spill outside
+    // the 20-bit random field instead of silently truncating them.
+    if (!Number.isInteger(value) || value < 0 || value > MAX_RANDOM) {
+        throw new Error(`RNG must return an integer between 0 and ${MAX_RANDOM}.`);
+    }
+    return BigInt(value);
+}
+
+function assertSignedI64(value: bigint): void {
+    const min = -I64_SIGN_BIT;
+    const max = I64_SIGN_BIT - 1n;
+    if (value < min || value > max) throw new Error("Signed BigInt value is out of the signed 64-bit range.");
+}
+
+function copyBytes(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
+    // This gives WebCrypto an ArrayBuffer-backed view and prevents callers from
+    // mutating data after validation or decryption.
+    const copy = new Uint8Array(bytes.length);
+    copy.set(bytes);
+    return copy;
 }
 
 
@@ -87,7 +140,7 @@ function rangeU64(tsStart: number, tsEnd: number): { lo: bigint; hi: bigint } {
  * @returns A number containing the requested number of random bits.
  */
 export const veryUnsafeRNG: RNG = (bits: number): number => {
-    if (bits <= 0 || bits > 32) {
+    if (!Number.isInteger(bits) || bits <= 0 || bits > 32) {
         throw new Error("RNG bits must be between 1 and 32.");
     }
 
@@ -105,18 +158,19 @@ export const veryUnsafeRNG: RNG = (bits: number): number => {
  * @throws If `bits` is outside the 1-32 range or the Web Crypto API is unavailable.
  */
 const defaultRNG: RNG = (bits: number): number => {
-    if (bits <= 0 || bits > 32) throw new Error("RNG bits must be between 1 and 32.");
-    const buf = new Uint32Array(1);
-    const cryptoObj = (globalThis.crypto ?? awaitCrypto()); // Find a crypto implementation.
-    cryptoObj.getRandomValues(buf);
+    if (!Number.isInteger(bits) || bits <= 0 || bits > 32) throw new Error("RNG bits must be between 1 and 32.");
+    getCrypto().getRandomValues(RNG_WORD);
 
     // If 32 bits are requested, we can return the full unsigned integer.
-    if (bits === 32) return buf[0] >>> 0;
+    if (bits === 32) return RNG_WORD[0] >>> 0;
 
-    // Otherwise, create a mask to extract the exact number of bits requested.
-    const mask = (1 << bits) - 1;
-    return buf[0] & mask;
+    return RNG_WORD[0] >>> (32 - bits);
 };
+
+function getCrypto(): Crypto {
+    cachedCrypto ??= (globalThis.crypto ?? awaitCrypto());
+    return cachedCrypto;
+}
 
 /**
  * @private Dynamically resolves a Web Crypto implementation, primarily for Node.js environments.
@@ -154,7 +208,7 @@ export const Hex: {
         return [...bytes].map(b => b.toString(16).padStart(2, "0")).join("").toUpperCase();
     },
     toBytes(hex: string): Uint8Array {
-        const h = hex.startsWith("0x") ? hex.slice(2) : hex;
+        const h = hex.replace(/^0x/i, "");
         if (h.length % 2 !== 0) throw new Error("Hex string must have an even number of characters.");
         if (!/^[0-9a-fA-F]*$/.test(h)) throw new Error("Hex string contains non-hexadecimal characters.");
 
@@ -177,7 +231,7 @@ export const BigIntHelpers: {
     readonly toBytesBE: (value: bigint) => Uint8Array;
 } = {
     fromBytesBE(bytes: Uint8Array): bigint {
-        if (bytes.length !== 8) throw new Error("Input must be exactly 8 bytes.");
+        if (bytes.length !== NANO64_BYTES) throw new Error("Input must be exactly 8 bytes.");
         let value = 0n;
         for (const byte of bytes) {
             value = (value << 8n) | BigInt(byte);
@@ -186,8 +240,8 @@ export const BigIntHelpers: {
     },
     toBytesBE(value: bigint): Uint8Array {
         if (value < 0n || value > MASK64) throw new Error("BigInt value is out of the unsigned 64-bit range.");
-        const out = new Uint8Array(8);
-        for (let i = 7; i >= 0; i--) {
+        const out = new Uint8Array(NANO64_BYTES);
+        for (let i = NANO64_BYTES - 1; i >= 0; i--) {
             out[i] = Number(value & 0xFFn);
             value >>= 8n;
         }
@@ -200,14 +254,20 @@ export const BigIntHelpers: {
  * The payload is structured as: 12-byte IV || 8-byte ciphertext || 16-byte GCM tag. Total 36 bytes.
  */
 export class EncryptedNano64 {
+    private readonly payload: Uint8Array;
+
     constructor(
         /** The original, decrypted `Nano64` ID. */
         public readonly id: Nano64,
         /** The raw encrypted payload (IV, ciphertext, and GCM tag). */
-        private readonly payload: Uint8Array,
-        /** The AES-GCM key used for this operation. */
-        public readonly key: CryptoKey
-    ) {}
+        payload: Uint8Array
+    ) {
+        if (payload.length !== ENCRYPTED_PAYLOAD_BYTES) {
+            throw new Error(`Encrypted payload must be exactly ${ENCRYPTED_PAYLOAD_BYTES} bytes.`);
+        }
+        // Store our own copy so id and payload remain a consistent pair.
+        this.payload = payload.slice();
+    }
 
     /** Returns the 36-byte encrypted payload as a 72-character uppercase hex string. */
     toEncryptedHex(): string { return Hex.fromBytes(this.payload); }
@@ -223,16 +283,16 @@ export class EncryptedNano64 {
  * independent generators to run in parallel without interfering with each other.
  */
 export class MonotonicNano64Generator {
-
-    private static readonly RANDOM_MASK = (1n << RANDOM_BITS) - 1n;
-
     constructor(
         /** Provide a minimum starting timestamp value. */
         private lastTimestamp = -1,
         /** Provide the starting value for the sequence generator */
         private lastRandom = -1n
     ) {
-
+        if (lastTimestamp !== -1) assertTimestamp(lastTimestamp, "Starting timestamp");
+        if (lastRandom < -1n || lastRandom > RANDOM_MASK) {
+            throw new Error(`Starting random value must be -1 or an integer between 0 and ${MAX_RANDOM}.`);
+        }
     }
 
     /**
@@ -247,23 +307,25 @@ export class MonotonicNano64Generator {
      * @returns A new, monotonically increasing `Nano64` instance.
      */
     next(timestamp: number = Date.now(), rng: RNG = defaultRNG): Nano64 {
-        if (timestamp < 0) throw new Error("Timestamp cannot be negative.");
-        if (timestamp >= 2 ** 44) throw new Error("Timestamp exceeds 44-bit range.");
+        assertTimestamp(timestamp);
 
         const t = Math.max(timestamp, this.lastTimestamp);
 
         let rand: bigint;
         if (t === this.lastTimestamp) {
-            rand = (this.lastRandom + 1n) & MonotonicNano64Generator.RANDOM_MASK;
+            rand = (this.lastRandom + 1n) & RANDOM_MASK;
             if (rand === 0n) {
+                // We only synthesize a future timestamp while it still fits in
+                // Nano64's 44-bit timestamp field.
                 const nextTimestamp = t + 1;
+                if (nextTimestamp > MAX_TIMESTAMP) throw new Error(`Timestamp exceeds the ${Number(TIMESTAMP_BITS)}-bit range.`);
                 this.lastTimestamp = nextTimestamp;
                 this.lastRandom = 0n;
                 const value = (BigInt(nextTimestamp) << RANDOM_BITS);
                 return new Nano64(value);
             }
         } else {
-            rand = BigInt(rng(Number(RANDOM_BITS)));
+            rand = randomField(rng);
         }
 
         this.lastTimestamp = t;
@@ -275,7 +337,7 @@ export class MonotonicNano64Generator {
 }
 
 /**
- * A 64-bit, time-sortable unique identifier.
+ * A 64-bit, time-sortable identifier.
  *
  * It consists of a 44-bit timestamp (epoch milliseconds) and a 20-bit random field,
  * providing a balance of high resolution, sortability, and collision resistance.
@@ -330,7 +392,7 @@ export class Nano64 {
      */
     static timeRangeToBytes(tsStart: number, tsEnd: number): [Uint8Array, Uint8Array] {
         const { lo, hi } = rangeU64(tsStart, tsEnd);
-        return [ BigIntHelpers.toBytesBE(lo), BigIntHelpers.toBytesBE(hi) ];
+        return [BigIntHelpers.toBytesBE(lo), BigIntHelpers.toBytesBE(hi)];
     }
 
     /**
@@ -342,17 +404,16 @@ export class Nano64 {
      * @throws If the timestamp is negative or exceeds the 44-bit range.
      */
     static generate(timestamp: number = Date.now(), rng: RNG = defaultRNG): Nano64 {
-        if (timestamp < 0) throw new Error("Timestamp cannot be negative.");
-        if (timestamp >= 2 ** 44) throw new Error("Timestamp exceeds 44-bit range.");
+        assertTimestamp(timestamp);
 
         const ms = BigInt(timestamp);
-        const rand = BigInt(rng(Number(RANDOM_BITS)));
+        const rand = randomField(rng);
         const value = (ms << RANDOM_BITS) | rand;
         return new Nano64(value);
     }
 
     /**
-     * Create a new monotonic factory with it's own state.
+     * Create a new monotonic factory with its own state.
      * 
      * @returns Monotonic Generator Factory
      */
@@ -392,7 +453,7 @@ export class Nano64 {
     }
 
     /**
-     * Creates a `Nano64` from an unsigned `bigint`. The value is masked to the u64 range.
+     * Creates a `Nano64` from an unsigned `bigint`.
      *
      * ⚠️⚠️ **WARNING:** ⚠️⚠️
      * This method is for **unsigned** integers only. Passing a signed `bigint`
@@ -402,7 +463,7 @@ export class Nano64 {
      * To convert a signed `bigint` back to a `Nano64`, you **must** use `SignedNano64.toId()`.
      */
     static fromUnsignedBigInt(v: bigint): Nano64 {
-        return new Nano64(v & MASK64);
+        return new Nano64(v);
     }
 
     /**
@@ -411,8 +472,16 @@ export class Nano64 {
      * @throws If the hex string has an invalid length after cleaning.
      */
     static fromHex(hex: string): Nano64 {
-        const clean = hex.replace("-", "").replace(/^0x/i, "");
-        if (clean.length !== 16) throw new Error("Hex string must contain exactly 16 hexadecimal characters.");
+        const withoutPrefix = hex.replace(/^0x/i, "");
+        // A dash is accepted only in the canonical display position. This keeps
+        // malformed values from being normalized into a different valid ID.
+        const clean = withoutPrefix.includes("-")
+            ? withoutPrefix.replace(/^([0-9a-fA-F]{11})-([0-9a-fA-F]{5})$/, "$1$2")
+            : withoutPrefix;
+
+        if (!/^[0-9a-fA-F]{16}$/.test(clean)) {
+            throw new Error("Hex string must be 16 hexadecimal characters or 11-5 dashed hexadecimal characters.");
+        }
         return new Nano64(BigInt("0x" + clean));
     }
 
@@ -438,22 +507,23 @@ export class Nano64 {
         /** Decrypts a 72-character hex payload. */
         readonly fromEncryptedHex: (encHex: string) => Promise<EncryptedNano64>;
     } {
-        const IV_LEN = 12; // 96 bits is recommended for AES-GCM.
-        const PAYLOAD_LEN = IV_LEN + 8 + 16; // IV (12) + Ciphertext (8) + GCM Tag (16) = 36 bytes.
+        // The key stays captured by the factory. EncryptedNano64 values only
+        // carry the ID and payload so passing them around does not leak key access.
+        const cryptoObj = getCrypto();
 
         /** @private Generates a fresh, random 96-bit IV for encryption. */
-        function randomIV(): Uint8Array {
-            const iv = new Uint8Array(IV_LEN);
-            (globalThis.crypto ?? awaitCrypto()).getRandomValues(iv);
+        function randomIV(): Uint8Array<ArrayBuffer> {
+            const iv = new Uint8Array(AES_GCM_IV_BYTES);
+            cryptoObj.getRandomValues(iv);
             return iv;
         }
 
         return {
             async encrypt(id: Nano64): Promise<EncryptedNano64> {
-                const iv = new Uint8Array(randomIV());
-                const plaintext = new Uint8Array(id.toBytes());
+                const iv = randomIV();
+                const plaintext = copyBytes(id.toBytes());
                 const ciphertextAndTag = new Uint8Array(
-                    await (globalThis.crypto ?? awaitCrypto()).subtle.encrypt(
+                    await cryptoObj.subtle.encrypt(
                         { name: "AES-GCM", iv },
                         aesGcmKey,
                         plaintext
@@ -461,11 +531,11 @@ export class Nano64 {
                 );
 
                 // Construct the final payload: [IV, Ciphertext, Tag]
-                const payload = new Uint8Array(PAYLOAD_LEN);
+                const payload = new Uint8Array(ENCRYPTED_PAYLOAD_BYTES);
                 payload.set(iv, 0);
-                payload.set(ciphertextAndTag, IV_LEN);
+                payload.set(ciphertextAndTag, AES_GCM_IV_BYTES);
 
-                return new EncryptedNano64(id, payload, aesGcmKey);
+                return new EncryptedNano64(id, payload);
             },
 
             async generateEncrypted(ts: number = clock(), rng: RNG = defaultRNG): Promise<EncryptedNano64> {
@@ -474,24 +544,24 @@ export class Nano64 {
             },
 
             async fromEncryptedBytes(bytes: Uint8Array): Promise<EncryptedNano64> {
-                if (bytes.length !== PAYLOAD_LEN) throw new Error(`Encrypted payload must be exactly ${PAYLOAD_LEN} bytes.`);
-                
+                if (bytes.length !== ENCRYPTED_PAYLOAD_BYTES) throw new Error(`Encrypted payload must be exactly ${ENCRYPTED_PAYLOAD_BYTES} bytes.`);
+
                 // Deconstruct the payload: [IV, Ciphertext, Tag]
-                const iv = new Uint8Array(bytes.subarray(0, IV_LEN));
-                const ciphertextAndTag = new Uint8Array(bytes.subarray(IV_LEN));
+                const iv = copyBytes(bytes.subarray(0, AES_GCM_IV_BYTES));
+                const ciphertextAndTag = copyBytes(bytes.subarray(AES_GCM_IV_BYTES));
 
                 const plaintext = new Uint8Array(
-                    await (globalThis.crypto ?? awaitCrypto()).subtle.decrypt(
+                    await cryptoObj.subtle.decrypt(
                         { name: "AES-GCM", iv },
                         aesGcmKey,
                         ciphertextAndTag
                     )
                 );
-                
-                if (plaintext.length !== 8) throw new Error("Decryption failed or yielded invalid data length.");
-                
+
+                if (plaintext.length !== NANO64_BYTES) throw new Error("Decryption failed or yielded invalid data length.");
+
                 const id = Nano64.fromBytes(plaintext);
-                return new EncryptedNano64(id, bytes, aesGcmKey);
+                return new EncryptedNano64(id, bytes);
             },
 
             async fromEncryptedHex(encHex: string): Promise<EncryptedNano64> {
@@ -518,7 +588,7 @@ export class SignedNano64 {
      * This constant is used to flip the sign by offsetting the unsigned value.
      * @private
      */
-    private static readonly SIGN_BIT = 1n << 63n;
+    private static readonly SIGN_BIT = I64_SIGN_BIT;
 
     /**
      * Converts a `Nano64` object into a signed 64-bit BigInt.
@@ -543,6 +613,8 @@ export class SignedNano64 {
      * @returns A new `Nano64` instance.
      */
     static toId(signedBigInt: bigint): Nano64 {
+        assertSignedI64(signedBigInt);
+        // Offset the signed storage value back into Nano64's unsigned u64 space.
         const unsignedValue = signedBigInt + this.SIGN_BIT;
         return Nano64.fromUnsignedBigInt(unsignedValue);
     }
@@ -559,20 +631,10 @@ export class SignedNano64 {
      * @returns An object containing `start` and `end` signed `bigint` values for the query.
      */
     static timeRangeToBigInts(tsStart: number, tsEnd: number): [bigint, bigint] {
-        if (tsStart < 0 || tsEnd < 0) throw new Error("Timestamps must be non-negative.");
-        if (tsStart > tsEnd) throw new Error("tsStart must be less than or equal to tsEnd.");
-
-        // Perform the calculation using BigInts to avoid 32-bit truncation.
-        const maxTs = Number((1n << TIMESTAMP_BITS) - 1n);
-        
-        if (tsStart > maxTs || tsEnd > maxTs) throw new Error(`Timestamp exceeds the ${Number(TIMESTAMP_BITS)}-bit range.`);
-        
-        const RAND_MAX = (1n << RANDOM_BITS) - 1n;
-        const unsignedStart = (BigInt(tsStart) << RANDOM_BITS);
-        const unsignedEnd = (BigInt(tsEnd) << RANDOM_BITS) | RAND_MAX;
+        const { lo, hi } = rangeU64(tsStart, tsEnd);
 
         // Convert the unsigned bounds to signed bounds
-        return [unsignedStart - this.SIGN_BIT, unsignedEnd - this.SIGN_BIT]
+        return [lo - this.SIGN_BIT, hi - this.SIGN_BIT];
     }
 
     /**
@@ -586,6 +648,8 @@ export class SignedNano64 {
      * @returns The UNIX epoch timestamp in milliseconds.
      */
     static getTimestamp(signedBigInt: bigint): number {
+        assertSignedI64(signedBigInt);
+
         // 1. Convert the signed value back to its original unsigned representation.
         const unsignedValue = signedBigInt + this.SIGN_BIT;
 

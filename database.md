@@ -51,7 +51,7 @@ const id3 = Nano64.generate(Date.now());
 
 // 3. Convert IDs to signed bigints before inserting
 const insert = db.prepare("INSERT INTO events (id, message) VALUES (?, ?)");
-// using the SigneNano64 class to convert and store the Ids
+// using the SignedNano64 class to convert and store the IDs
 insert.run(SignedNano64.fromId(id1), "Event from 2s ago");
 insert.run(SignedNano64.fromId(id2), "Event from 1s ago");
 insert.run(SignedNano64.fromId(id3), "Event from now");
@@ -73,4 +73,3 @@ for (const row of results) {
   console.log(`- ${found.toHex()} @ ${found.toDate().toISOString()} → ${row.message}`);
 }
 ```
-

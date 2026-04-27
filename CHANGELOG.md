@@ -1,5 +1,18 @@
 # Change Log
 
+## 1.4.0 April 27, 2026
+- BREAKING: `EncryptedNano64` no longer exposes or stores the AES-GCM `CryptoKey`; encrypted wrapper objects now only carry the decrypted ID and encrypted payload.
+- BREAKING: `Nano64.fromUnsignedBigInt()` now rejects values outside the unsigned 64-bit range instead of masking them into range.
+- BREAKING: Custom RNG output is now validated and must be an integer within the 20-bit random field.
+- Hardened encrypted payload handling with length validation and defensive byte copies to keep decrypted IDs and payload bytes consistent.
+- Tightened timestamp/range validation, signed 64-bit conversion bounds, monotonic overflow handling, and dashed hex parsing.
+- Cached Web Crypto resolution and reused the default RNG scratch buffer to reduce per-ID overhead.
+- Reduced npm package contents with an explicit `files` allowlist, added `exports`, marked the package side-effect-free, and added a `prepack` build.
+- Removed undeclared `npx terser` package scripts.
+- Updated documentation to clarify collision/security boundaries and avoid overclaiming UUID/ULID-equivalent guarantees.
+- Upgraded Vitest and refreshed the lockfile to clear audited dev-tool vulnerabilities.
+- Added regression tests for strict parsing, invalid RNG output, encrypted payload immutability, monotonic overflow, non-integer ranges, and signed integer bounds.
+
 ## 1.3.1 Oct 10, 2025
 BREAKING: Changed `fromBigInt` to `fromUnsignedBigInt` to avoid confusion with the `SignedNano64` methods.
 Added README and doc comments to reduce likelyhood of unsigned/signed misuse.
